@@ -23,3 +23,10 @@ type T = {
 	x:  1;
 	yc: 2; // Test
 };
+
+const s = "Hello, World!";
+
+const withCompute = {
+	[s]: 1,
+	z:   2,
+};

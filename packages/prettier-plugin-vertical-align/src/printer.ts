@@ -21,20 +21,25 @@ export const printer: Printer = {
 		// }
 
 		// if (node.type === "Program") {
-		// 	console.log("node", inspect(path, {depth: 10}));
-		// 	console.log(options);
+		// 	console.log("node", inspect(node.body, { depth: 10 }));
 		// }
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
-			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - (node.optional ? 1 : 0);
+			const addedLength =
+				keyLength -
+				(node.key.loc.end.column - node.key.loc.start.column) -
+				(node.optional ? 1 : 0) -
+				(node.computed ? 2 : 0);
 
 			// console.log("keyLength", keyLength);
 
 			switch (node.type) {
 				case "Property":
 					return group([
+						node.computed ? "[" : "",
 						path.call(_print, "key"),
+						node.computed ? "]" : "",
 						":" + " ".repeat(addedLength + 1),
 						path.call(_print, valueField(node)),
 					]);
@@ -63,7 +68,10 @@ export const printer: Printer = {
 				for (const property of properties) {
 					keyLength = Math.max(
 						keyLength,
-						property.key.loc.end.column - property.key.loc.start.column + (property.optional ? 1 : 0),
+						property.key.loc.end.column -
+							property.key.loc.start.column +
+							(property.optional ? 1 : 0) +
+							(property.computed ? 2 : 0),
 					);
 				}
 
