@@ -4,8 +4,9 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
-		"format": "prettier --write ."
+		"test": "prettier src/index.ts && echo 'success' || echo 'failure'",
+		"format": "prettier --write src/index.ts",
+		"format:check": "prettier src/index.ts"
 	},
 	"dependencies": {
 		"@huggingface/prettier-plugin-vertical-align": "workspace:*",

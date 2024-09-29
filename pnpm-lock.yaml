@@ -17,6 +17,9 @@ importers:
 
   packages/prettier-plugin-vertical-align:
     devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.7.4
       prettier:
         specifier: ^3.3.3
         version: 3.3.3
@@ -38,6 +41,9 @@ importers:
 
 packages:
 
+  '@types/node@22.7.4':
+    resolution: {integrity: sha512-y+NPi1rFzDs1NdQHHToqeiX2TIS79SWEAw9GYhkkx8bD0ChpfqC+n2j5OXOCpzfojBEBt6DnEnnG9MY0zk1XLg==}
+
   prettier@3.3.3:
     resolution: {integrity: sha512-i2tDNA0O5IrMO757lfrdQZCc2jPNDVntV0m/+4whiDfWaTKfMNgR7Qz0NAeGz/nRqF4m5/6CLzbP4/liHt12Ew==}
     engines: {node: '>=14'}
@@ -48,8 +54,17 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  undici-types@6.19.8:
+    resolution: {integrity: sha512-ve2KP6f/JnbPBFyobGHuerC9g1FYGn/F8n1LWTwNxCEzd6IfqTwUQcNXgEtmmQ6DlRrC1hrSrBnCZPokRrDHjw==}
+
 snapshots:
+
+  '@types/node@22.7.4':
+    dependencies:
+      undici-types: 6.19.8
 
   prettier@3.3.3: {}
 
   typescript@5.6.2: {}
+
+  undici-types@6.19.8: {}

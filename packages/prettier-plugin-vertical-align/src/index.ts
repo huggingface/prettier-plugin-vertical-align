@@ -10,6 +10,5 @@ export const parsers = {
 };
 
 export const printers: Record<string, Printer> = {
-	typescript: printer,
-	babel: printer,
+	estree: printer,
 };
