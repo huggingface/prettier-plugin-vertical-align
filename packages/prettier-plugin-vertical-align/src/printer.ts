@@ -1,5 +1,5 @@
-import type { Printer } from "prettier";
-import { inspect } from "node:util";
+import type { AstPath, Printer } from "prettier";
+// import { inspect } from "node:util";
 import { doc } from "prettier";
 import { getOriginalPrinter } from "./original-printer.js";
 
@@ -30,9 +30,9 @@ const {
 	markAsRoot,
 } = doc.builders;
 
-let hasPrinted = false;
-
+type Node = AstPath["node"]
 const keyLengthSymbol = Symbol("keyLength");
+const typeAnnotationPrefix = Symbol("typeAnnotation");
 
 export const printer: Printer = {
 	print(path, options, _print,...args) {
@@ -40,46 +40,54 @@ export const printer: Printer = {
 
 		const node = path.node;
 
-		if (node.type === "Property") {
-			if (!node[keyLengthSymbol]) {
-				return getOriginalPrinter().print(path, options, _print, ...args);
-			}
+		if (node.type === "Program") {
+			// console.log("node", inspect(node, {depth: 10}));
+		}
 
+		if (node[keyLengthSymbol]) {				
 			const keyLength = node[keyLengthSymbol];
 			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column);
-
+			
 			// console.log("keyLength", keyLength);
 
+			switch (node.type) {
+				case "Property":
+					return group([
+						path.call(_print, "key"),
+						":" + " ".repeat(addedLength + 1),
+						path.call(_print, valueField(node)),
+					])
+				case "TSPropertySignature":
+					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
+					return group([
+						path.call(_print, "key"),
+						path.call(_print, "typeAnnotation"),
+					]);
+				default:
+					throw new Error(`Unexpected node type: ${node.type}`);	
+			}
+		}
+
+		if (node[typeAnnotationPrefix]) {
+			const addedLength = node[typeAnnotationPrefix];
 			return group([
-				path.call(_print, "key"),
-				":" + " ".repeat(addedLength + 1),
-				path.call(_print, "value"),
+				": " + " ".repeat(addedLength),
+				path.call(_print, "typeAnnotation"),
 			]);
 		}
 
-		if (node.type !== "ObjectExpression" || node.properties.length <= 1) {
-			return getOriginalPrinter().print(path, options, _print, ...args);
-		}
-
-		if (node.type === "ObjectExpression") {
-			hasPrinted = true;
+		if (isPropertyContainer(node)) {
 			// console.log("node", inspect(node, {depth: 10}));
+			const properties: Node[] = nodeProperties(node).filter(isProperty).filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line);
 
-			const multipleLines = node.properties[1].loc.start.line !== node.properties[0].loc.start.line;
-
-			if (!multipleLines) {
-				return getOriginalPrinter().print(path, options, _print, ...args);
-			}
-
-			let keyLength = 0;
-			for (const property of node.properties) {
-				if (property.key.loc.start.line === property.key.loc.end.line) {
+			// Check props are not on the same line (we don't want to add extra spaces in that case)
+			if (properties[1].loc.start.line !== properties[0].loc.start.line) {
+				let keyLength = 0;
+				for (const property of properties) {
 					keyLength = Math.max(keyLength, property.key.loc.end.column - property.key.loc.start.column);
 				}
-			}
 
-			for (const property of node.properties) {
-				if (property.loc.start.line === property.loc.end.line) {
+				for (const property of properties) {
 					property[keyLengthSymbol] = keyLength;
 				}
 			}
@@ -88,3 +96,31 @@ export const printer: Printer = {
 		return getOriginalPrinter().print(path, options, _print, ...args);
 	},
 };
+
+function isPropertyContainer(node: AstPath["node"]) {
+	return node.type === "ObjectExpression" || node.type === "TSInterfaceBody";
+}
+
+function nodeProperties(node: AstPath["node"]) {
+	if (node.type === "ObjectExpression") {
+		return node.properties;
+	}
+	if (node.type === "TSInterfaceBody") {
+		return node.body;
+	}
+	throw new Error(`Unexpected node type: ${node.type}`);
+}
+
+function isProperty(node: AstPath["node"]) {
+	return node.type === "Property" || node.type === "TSPropertySignature";
+}
+
+function valueField(node: AstPath["node"]) {
+	if (node.type === "Property") {
+		return "value";
+	}
+	if (node.type === "TSPropertySignature") {
+		return "typeAnnotation";
+	}
+	throw new Error(`Unexpected node type: ${node.type}`);
+}

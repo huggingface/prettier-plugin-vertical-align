@@ -4,7 +4,7 @@ const x = {
 };
 
 interface X {
-	a: string;
+	a:  string;
 	cb: number;
 }
 

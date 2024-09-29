@@ -1,0 +1,28 @@
+name: Test
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  node:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          # Could use something like rmacklin/fetch-through-merge-base@v0 instead when the repo gets bigger
+          fetch-depth: 0
+
+      - run: corepack enable
+
+      - uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "pnpm"
+          cache-dependency-path: "**/pnpm-lock.yaml"
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm test
