@@ -1,6 +1,6 @@
 import type { AstPath, Printer } from "prettier";
 import prettier from "prettier";
-import { inspect } from "node:util";
+// import { inspect } from "node:util";
 const { doc } = prettier;
 import { getOriginalPrinter } from "./original-printer.js";
 
@@ -16,9 +16,9 @@ export const printer: Printer = {
 
 		const node = path.node;
 
-		if (node.type === "TSPropertySignature") {
-			// console.log("node", inspect(node, {depth: 10}));
-		}
+		// if (node.type === "Program") {
+		// 	console.log("node", inspect(node.body, {depth: 10}));
+		// }
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
@@ -73,7 +73,7 @@ export const printer: Printer = {
 };
 
 function isPropertyContainer(node: AstPath["node"]) {
-	return node.type === "ObjectExpression" || node.type === "TSInterfaceBody";
+	return node.type === "ObjectExpression" || node.type === "TSInterfaceBody" || node.type === "TSTypeLiteral";
 }
 
 function nodeProperties(node: AstPath["node"]) {
@@ -82,6 +82,9 @@ function nodeProperties(node: AstPath["node"]) {
 	}
 	if (node.type === "TSInterfaceBody") {
 		return node.body;
+	}
+	if (node.type === "TSTypeLiteral") {
+		return node.members;
 	}
 	throw new Error(`Unexpected node type: ${node.type}`);
 }
