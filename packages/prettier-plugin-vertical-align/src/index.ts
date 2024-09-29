@@ -22,7 +22,10 @@ function wrapParser<T extends Parser>(parser: T): T {
 		...parser,
 		preprocess(text, options) {
 			setOriginalPrinter(options.printer as Printer);
-			options.printer = printer;
+			options.printer = {
+				...(options.printer as Printer),
+				...printer
+			};
 			return parser.preprocess?.(text, options) ?? text;
 		}
 	};

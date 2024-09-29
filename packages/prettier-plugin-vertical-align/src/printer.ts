@@ -16,8 +16,13 @@ export const printer: Printer = {
 
 		const node = path.node;
 
+		// if (node.comments) {
+		// 	console.log("!!COMMENTS");
+		// }
+
 		// if (node.type === "Program") {
-		// 	console.log("node", inspect(node.body, {depth: 10}));
+		// 	console.log("node", inspect(path, {depth: 10}));
+		// 	console.log(options);
 		// }
 
 		if (node[keyLengthSymbol]) {

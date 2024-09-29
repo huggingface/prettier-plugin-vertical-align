@@ -21,5 +21,5 @@ const oneLine = { x: 1, yc: 2 };
 
 type T = {
 	x:  1;
-	yc: 2;
+	yc: 2; // Test
 };
