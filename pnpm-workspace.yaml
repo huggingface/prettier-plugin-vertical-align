@@ -1,0 +1,3 @@
+packages:
+  - "packages/prettier-plugin-vertical-align"
+  - "packages/test"

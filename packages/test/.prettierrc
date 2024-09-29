@@ -1,0 +1,6 @@
+{
+	"printWidth": 120,
+	"tabWidth": 2,
+	"useTabs": true,
+	"plugins": ["@huggingface/prettier-plugin-vertical-align"]
+}
