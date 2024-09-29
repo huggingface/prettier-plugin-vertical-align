@@ -1,5 +1,4 @@
 # prettier-plugin-vertical-align
-Bringing old school cool to prettier
 
 Aligns object properties and interface members vertically for JS/TS code.
 
