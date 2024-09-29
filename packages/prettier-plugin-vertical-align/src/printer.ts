@@ -1,53 +1,29 @@
 import type { AstPath, Printer } from "prettier";
-// import { inspect } from "node:util";
-import { doc } from "prettier";
+import prettier from "prettier";
+import { inspect } from "node:util";
+const { doc } = prettier;
 import { getOriginalPrinter } from "./original-printer.js";
 
-const {
-	group,
-	indent,
-	join,
-	line,
-	softline,
-	breakParent,
-	cursor,
-	hardline,
-	hardlineWithoutBreakParent,
-	lineSuffixBoundary,
-	literalline,
-	literallineWithoutBreakParent,
-	trim,
-	addAlignmentToDoc,
-	align,
-	conditionalGroup,
-	dedent,
-	dedentToRoot,
-	fill,
-	ifBreak,
-	indentIfBreak,
-	label,
-	lineSuffix,
-	markAsRoot,
-} = doc.builders;
+const { group } = doc.builders;
 
-type Node = AstPath["node"]
+type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
 const typeAnnotationPrefix = Symbol("typeAnnotation");
 
 export const printer: Printer = {
-	print(path, options, _print,...args) {
+	print(path, options, _print, ...args) {
 		// const originalPrinter = options.printer as Printer;
 
 		const node = path.node;
 
-		if (node.type === "Program") {
+		if (node.type === "TSPropertySignature") {
 			// console.log("node", inspect(node, {depth: 10}));
 		}
 
-		if (node[keyLengthSymbol]) {				
+		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
-			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column);
-			
+			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - (node.optional ? 1 : 0);
+
 			// console.log("keyLength", keyLength);
 
 			switch (node.type) {
@@ -56,35 +32,34 @@ export const printer: Printer = {
 						path.call(_print, "key"),
 						":" + " ".repeat(addedLength + 1),
 						path.call(_print, valueField(node)),
-					])
+					]);
 				case "TSPropertySignature":
 					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
-					return group([
-						path.call(_print, "key"),
-						path.call(_print, "typeAnnotation"),
-					]);
+					return getOriginalPrinter().print(path, options, _print, ...args);
 				default:
-					throw new Error(`Unexpected node type: ${node.type}`);	
+					throw new Error(`Unexpected node type: ${node.type}`);
 			}
 		}
 
 		if (node[typeAnnotationPrefix]) {
 			const addedLength = node[typeAnnotationPrefix];
-			return group([
-				": " + " ".repeat(addedLength),
-				path.call(_print, "typeAnnotation"),
-			]);
+			return group([": " + " ".repeat(addedLength), path.call(_print, "typeAnnotation")]);
 		}
 
 		if (isPropertyContainer(node)) {
 			// console.log("node", inspect(node, {depth: 10}));
-			const properties: Node[] = nodeProperties(node).filter(isProperty).filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line);
+			const properties: Node[] = nodeProperties(node)
+				.filter(isProperty)
+				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand);
 
 			// Check props are not on the same line (we don't want to add extra spaces in that case)
-			if (properties[1].loc.start.line !== properties[0].loc.start.line) {
+			if (properties.length > 1 && properties[1].loc.start.line !== properties[0].loc.start.line) {
 				let keyLength = 0;
 				for (const property of properties) {
-					keyLength = Math.max(keyLength, property.key.loc.end.column - property.key.loc.start.column);
+					keyLength = Math.max(
+						keyLength,
+						property.key.loc.end.column - property.key.loc.start.column + (property.optional ? 1 : 0),
+					);
 				}
 
 				for (const property of properties) {
