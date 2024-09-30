@@ -1,12 +1,12 @@
 {
 	"name": "@huggingface/prettier-plugin-vertical-align",
 	"packageManager": "pnpm@9.11.0",
-	"version": "0.0.7",
+	"version": "0.0.8",
 	"description": "",
 	"scripts": {
 		"test": "pnpm -w test",
 		"build": "tsc -b",
-		"prepublish": "npm run build && npm run test"
+		"prepublishOnly": "npm run build && npm run test"
 	},
 	"type": "module",
 	"main": "dist/index.js",
