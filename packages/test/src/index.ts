@@ -47,23 +47,31 @@ class X {
 	static test(...args: any[]) {}
 }
 
-const x2 = {
-	a:         1,
-	abc:
-		"abcedfghijkmnopqrstuvwxyz" ||
-		"abcedfghijkmnopqrstuvwxyz" ||
-		"abcedfghijkmnopqrstuvwxyz" ||
-		"abcedfghijkmnopqrstuvwxyz",
-	sameLine:  test(
-		"abcedfghijkmnopqrstuvwxyz" ||
+async function test2() {
+	const x2 = {
+		a:         1,
+		abc:
+			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz",
-	),
-	sameLine2: X.test(
-		"abcedfghijkmnopqrstuvwxyz" ||
+		sameLine:  test(
 			"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz",
+		),
+		sameLine2: X.test(
 			"abcedfghijkmnopqrstuvwxyz" ||
-			"abcedfghijkmnopqrstuvwxyz",
-	),
-};
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz",
+		),
+		sameAsync: await test(
+			"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz",
+		),
+	};
+}
