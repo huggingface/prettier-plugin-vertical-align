@@ -39,15 +39,31 @@ function diposable() {
 	};
 }
 
-async function test() {
+async function test(...args: any[]) {
 	await using x = diposable();
 }
 
+class X {
+	static test(...args: any[]) {}
+}
+
 const x2 = {
-	a:   1,
+	a:         1,
 	abc:
 		"abcedfghijkmnopqrstuvwxyz" ||
 		"abcedfghijkmnopqrstuvwxyz" ||
 		"abcedfghijkmnopqrstuvwxyz" ||
 		"abcedfghijkmnopqrstuvwxyz",
+	sameLine:  test(
+		"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz",
+	),
+	sameLine2: X.test(
+		"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz",
+	),
 };

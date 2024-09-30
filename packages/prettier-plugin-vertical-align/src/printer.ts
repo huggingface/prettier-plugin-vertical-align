@@ -38,7 +38,8 @@ export const printer: Printer = {
 				case "Property":
 				case "ObjectProperty": {
 					const shouldMoveCompletelyToNextLine =
-						node.value.type !== "ObjectExpression" && node.value.type !== "ArrayExpression";
+						node.value.type !== "ObjectExpression" && node.value.type !== "ArrayExpression" && node.value.type !== "CallExpression";
+					// console.log(node.value.type);
 					return group([
 						node.computed ? "[" : "",
 						path.call(_print, "key"),
