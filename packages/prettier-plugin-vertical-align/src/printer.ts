@@ -10,6 +10,16 @@ type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
 const typeAnnotationPrefix = Symbol("typeAnnotation");
 
+function shouldMoveCompletelyToNextLine(node: Node) {
+	return node.type === "LogicalExpression";
+
+	// Alternative implementation:
+	// return node.value.type !== "ObjectExpression" &&
+	//   node.value.type !== "ArrayExpression" &&
+	//   node.value.type !== "CallExpression" &&
+	//   node.value.type !== "AwaitExpression";
+}
+
 export const printer: Printer = {
 	print(path, options, _print, ...args) {
 		// const originalPrinter = options.printer as Printer;
@@ -37,11 +47,7 @@ export const printer: Printer = {
 			switch (node.type) {
 				case "Property":
 				case "ObjectProperty": {
-					const shouldMoveCompletelyToNextLine =
-						node.value.type !== "ObjectExpression" &&
-						node.value.type !== "ArrayExpression" &&
-						node.value.type !== "CallExpression" &&
-						node.value.type !== "AwaitExpression";
+					const shouldMoveCompletelyToNextLine = node.value.type === "LogicalExpression";
 					// console.log(node.value.type);
 					return group([
 						node.computed ? "[" : "",

@@ -49,29 +49,42 @@ class X {
 
 async function test2() {
 	const x2 = {
-		a:         1,
+		a:            1,
 		abc:
 			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz" ||
 			"abcedfghijkmnopqrstuvwxyz",
-		sameLine:  test(
+		sameLine:     test(
 			"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz",
 		),
-		sameLine2: X.test(
+		sameLine2:    X.test(
 			"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz",
 		),
-		sameAsync: await test(
+		sameAsync:    await test(
 			"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz",
 		),
+		sameFuncDecl: (x: string) => {
+			return (
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz" ||
+				"abcedfghijkmnopqrstuvwxyz"
+			);
+		},
+		sameTemplate: `<p>Great news! ${"abcedfghijkmnopqrstuvwxyz"} blabla  ${
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz" ||
+			"abcedfghijkmnopqrstuvwxyz"
+		}.</p>`,
 	};
 }
