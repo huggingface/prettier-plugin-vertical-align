@@ -9,11 +9,6 @@ const y = {
 	a: 1,
 };
 
-const short = {
-	x: 1,
-	y,
-};
-
 interface X {
 	a:   string;
 	cb?: number;
@@ -88,3 +83,11 @@ async function test2() {
 		}.</p>`,
 	};
 }
+
+const short = {
+	x: 1,
+	y,
+	test() {
+		return 1;
+	},
+};

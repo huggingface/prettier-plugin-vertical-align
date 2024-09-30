@@ -72,10 +72,11 @@ export const printer: Printer = {
 		}
 
 		if (isPropertyContainer(node)) {
+			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node)
 				.filter(isProperty)
-				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand);
+				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand && !node.method);
 
 			// Check props are not on the same line (we don't want to add extra spaces in that case)
 			if (properties.length > 1 && properties[1].loc.start.line !== properties[0].loc.start.line) {
