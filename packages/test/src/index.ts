@@ -1,6 +1,8 @@
 const x = {
 	a:  1,
-	bc: 2,
+	bc: {
+		x: 1,
+	},
 };
 
 const y = {
@@ -40,3 +42,12 @@ function diposable() {
 async function test() {
 	await using x = diposable();
 }
+
+const x2 = {
+	a:   1,
+	abc:
+		"abcedfghijkmnopqrstuvwxyz" ||
+		"abcedfghijkmnopqrstuvwxyz" ||
+		"abcedfghijkmnopqrstuvwxyz" ||
+		"abcedfghijkmnopqrstuvwxyz",
+};

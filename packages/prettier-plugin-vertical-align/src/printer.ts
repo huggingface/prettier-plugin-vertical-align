@@ -4,7 +4,7 @@ import prettier from "prettier";
 const { doc } = prettier;
 import { getOriginalPrinter } from "./original-printer.js";
 
-const { group } = doc.builders;
+const { group, softline, line, ifBreak, indent } = doc.builders;
 
 type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
@@ -36,14 +36,19 @@ export const printer: Printer = {
 
 			switch (node.type) {
 				case "Property":
-				case "ObjectProperty":
+				case "ObjectProperty": {
+					const shouldMoveCompletelyToNextLine =
+						node.value.type !== "ObjectExpression" && node.value.type !== "ArrayExpression";
 					return group([
 						node.computed ? "[" : "",
 						path.call(_print, "key"),
 						node.computed ? "]" : "",
 						":" + " ".repeat(addedLength + 1),
-						path.call(_print, valueField(node)),
+						shouldMoveCompletelyToNextLine
+							? ifBreak(indent(group([line, path.call(_print, valueField(node))])), path.call(_print, valueField(node)))
+							: path.call(_print, valueField(node)),
 					]);
+				}
 				case "TSPropertySignature":
 					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
 					return getOriginalPrinter().print(path, options, _print, ...args);
