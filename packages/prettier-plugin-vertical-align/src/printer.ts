@@ -47,14 +47,13 @@ export const printer: Printer = {
 			switch (node.type) {
 				case "Property":
 				case "ObjectProperty": {
-					const shouldMoveCompletelyToNextLine = node.value.type === "LogicalExpression";
 					// console.log(node.value.type);
 					return group([
 						node.computed ? "[" : "",
 						path.call(_print, "key"),
 						node.computed ? "]" : "",
 						":" + " ".repeat(addedLength + 1),
-						shouldMoveCompletelyToNextLine
+						shouldMoveCompletelyToNextLine(node[valueField(node)])
 							? ifBreak(indent(group([line, path.call(_print, valueField(node))])), path.call(_print, valueField(node)))
 							: path.call(_print, valueField(node)),
 					]);
