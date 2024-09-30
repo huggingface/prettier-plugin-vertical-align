@@ -32,6 +32,9 @@ importers:
       '@huggingface/prettier-plugin-vertical-align':
         specifier: workspace:*
         version: link:../prettier-plugin-vertical-align
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.7.4
       prettier:
         specifier: ^3.3.3
         version: 3.3.3

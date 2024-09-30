@@ -4,11 +4,13 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "prettier --check src/index.ts",
-		"test:write": "prettier --write src/index.ts"
+		"test": "prettier --check src",
+		"test:write": "prettier --write src"
 	},
+	"private": true,
 	"dependencies": {
 		"@huggingface/prettier-plugin-vertical-align": "workspace:*",
+		"@types/node": "^22.0.0",
 		"prettier": "^3.3.3",
 		"typescript": "^5.6.2"
 	},

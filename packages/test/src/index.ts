@@ -30,3 +30,13 @@ const withCompute = {
 	[s]: 1,
 	z:   2,
 };
+
+function diposable() {
+	return {
+		[Symbol.asyncDispose]: async () => {},
+	};
+}
+
+async function test() {
+	await using x = diposable();
+}

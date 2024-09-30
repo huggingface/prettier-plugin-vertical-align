@@ -36,6 +36,7 @@ export const printer: Printer = {
 
 			switch (node.type) {
 				case "Property":
+				case "ObjectProperty":
 					return group([
 						node.computed ? "[" : "",
 						path.call(_print, "key"),
@@ -103,11 +104,12 @@ function nodeProperties(node: AstPath["node"]) {
 }
 
 function isProperty(node: AstPath["node"]) {
-	return node.type === "Property" || node.type === "TSPropertySignature";
+	// JS has ObjectProperty, TS has Property
+	return node.type === "Property" || node.type === "TSPropertySignature" || node.type === "ObjectProperty";
 }
 
 function valueField(node: AstPath["node"]) {
-	if (node.type === "Property") {
+	if (node.type === "Property" || node.type === "ObjectProperty") {
 		return "value";
 	}
 	if (node.type === "TSPropertySignature") {
