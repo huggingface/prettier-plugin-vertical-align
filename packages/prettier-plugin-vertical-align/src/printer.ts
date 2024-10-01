@@ -30,9 +30,9 @@ export const printer: Printer = {
 		// 	console.log("!!COMMENTS");
 		// }
 
-		// if (node.type === "Program") {
-		// 	console.log("node", inspect(node.body, { depth: 10 }));
-		// }
+		if (node.type === "Program") {
+			// 	console.log("node", inspect(node.body, { depth: 10 }));
+		}
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
@@ -72,16 +72,34 @@ export const printer: Printer = {
 		}
 
 		if (isPropertyContainer(node)) {
+			let groups: Node[][] = [];
+			let prevLine = -Infinity;
+
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node)
 				.filter(isProperty)
 				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand && !node.method);
 
-			// Check props are not on the same line (we don't want to add extra spaces in that case)
-			if (properties.length > 1 && properties[1].loc.start.line !== properties[0].loc.start.line) {
+			for (const prop of properties) {
+				if (prevLine === prop.key.loc.start.line) {
+					// Multiple properties on the same line
+					return getOriginalPrinter().print(path, options, _print, ...args);
+				}
+				if (
+					prevLine === -Infinity ||
+					(options.alignInGroups === "always" && prevLine !== prop.key.loc.start.line - 1)
+				) {
+					groups.push([]);
+				}
+				groups.at(-1)!.push(prop);
+
+				prevLine = prop.key.loc.start.line;
+			}
+
+			for (const group of groups.filter((group) => group.length > 1)) {
 				let keyLength = 0;
-				for (const property of properties) {
+				for (const property of group) {
 					keyLength = Math.max(
 						keyLength,
 						property.key.loc.end.column -
@@ -91,7 +109,7 @@ export const printer: Printer = {
 					);
 				}
 
-				for (const property of properties) {
+				for (const property of group) {
 					property[keyLengthSymbol] = keyLength;
 				}
 			}

@@ -1,3 +1,4 @@
 packages:
   - "packages/prettier-plugin-vertical-align"
   - "packages/test"
+  - "packages/test-groups"

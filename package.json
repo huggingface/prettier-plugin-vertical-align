@@ -5,8 +5,8 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "pnpm --filter \"./packages/prettier-*\" build && pnpm --filter \"./packages/test\" test",
-		"test:write": "pnpm --filter \"./packages/prettier-*\" build && pnpm --filter \"./packages/test\" test:write"
+		"test": "pnpm --filter \"./packages/prettier-*\" build && pnpm --filter \"./packages/test*\" test",
+		"test:write": "pnpm --filter \"./packages/prettier-*\" build && pnpm --filter \"./packages/test*\" test:write"
 	},
 	"keywords": [],
 	"author": "",
