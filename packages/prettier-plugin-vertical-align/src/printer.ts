@@ -79,7 +79,7 @@ export const printer: Printer = {
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node)
 				.filter(isProperty)
-				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand && !node.method);
+				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line);
 
 			for (const prop of properties) {
 				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
@@ -93,7 +93,11 @@ export const printer: Printer = {
 				) {
 					groups.push([]);
 				}
-				groups.at(-1)!.push(prop);
+
+				// Shorthands and methods are not aligned but they do not start a new group
+				if (!prop.shorthand && !prop.method) {
+					groups.at(-1)!.push(prop);
+				}
 
 				prevLine = prop.key.loc.start.line;
 			}

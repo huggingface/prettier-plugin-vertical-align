@@ -1,5 +1,8 @@
+const y = 1;
+
 const x = {
 	group1:  "a",
+	y,
 	group1b: "b",
 
 	group2:     "a",
