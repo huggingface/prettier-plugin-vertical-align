@@ -79,7 +79,12 @@ export const printer: Printer = {
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node)
 				.filter(isProperty)
-				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line);
+				.filter((node: Node) =>
+					options.alignInGroups === "always"
+						? // Multiline values break groups
+							node.loc.start.line === node.loc.end.line
+						: node.key.loc.start.line === node.key.loc.end.line,
+				);
 
 			for (const prop of properties) {
 				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
@@ -87,10 +92,7 @@ export const printer: Printer = {
 					// Multiple properties on the same line
 					return getOriginalPrinter().print(path, options, _print, ...args);
 				}
-				if (
-					prevLine === -Infinity ||
-					(options.alignInGroups === "always" && prevLine !== propStart - 1)
-				) {
+				if (prevLine === -Infinity || (options.alignInGroups === "always" && prevLine !== propStart - 1)) {
 					groups.push([]);
 				}
 

@@ -59,10 +59,10 @@ const x = {
 	// some comment between two lines
 	group2bbbb: "b",
 
-	group3:    "a",
-	group3bis: {
+	group3: "a",
+	group4bb: { // new group due to multiline value
 		x: 1,
 	},
-	group4: "b", // new group due to multiline value in group3bis
+	group5: "b", 
 };
 ```

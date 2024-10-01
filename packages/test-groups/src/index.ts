@@ -9,9 +9,9 @@ const x = {
 	// some comment
 	group2bbbb: "b",
 
-	group3:    "a",
-	group3bis: {
+	group3: "a",
+	group4bbb: {
 		x: 1,
 	},
-	group4: "b",
+	group5: "b",
 };
