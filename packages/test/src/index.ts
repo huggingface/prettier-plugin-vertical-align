@@ -85,9 +85,11 @@ async function test2() {
 }
 
 const short = {
-	x: 1,
+	x:  1,
 	y,
+	...y,
 	test() {
 		return 1;
 	},
+	zz: 1,
 };

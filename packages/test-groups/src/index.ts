@@ -1,8 +1,10 @@
 const y = 1;
+const y2 = { props: {} };
 
 const x = {
 	group1:  "a",
 	y,
+	...y2.props,
 	group1b: "b",
 
 	group2:     "a",

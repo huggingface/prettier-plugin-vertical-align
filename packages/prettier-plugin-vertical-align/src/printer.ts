@@ -77,14 +77,12 @@ export const printer: Printer = {
 
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
-			const properties: Node[] = nodeProperties(node)
-				.filter(isProperty)
-				.filter((node: Node) =>
-					options.alignInGroups === "always"
-						? // Multiline values break groups
-							node.loc.start.line === node.loc.end.line
-						: node.key.loc.start.line === node.key.loc.end.line,
-				);
+			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
+				options.alignInGroups === "always" || !isProperty(node)
+					? // Multiline values break groups
+						node.loc.start.line === node.loc.end.line
+					: node.key.loc.start.line === node.key.loc.end.line,
+			);
 
 			for (const prop of properties) {
 				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
@@ -97,11 +95,11 @@ export const printer: Printer = {
 				}
 
 				// Shorthands and methods are not aligned but they do not start a new group
-				if (!prop.shorthand && !prop.method) {
+				if (isProperty(prop) && !prop.shorthand && !prop.method) {
 					groups.at(-1)!.push(prop);
 				}
 
-				prevLine = prop.key.loc.start.line;
+				prevLine = prop.loc.start.line;
 			}
 
 			for (const group of groups.filter((group) => group.length > 1)) {
