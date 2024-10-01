@@ -3,6 +3,7 @@ const x = {
 	group1b: "b",
 
 	group2:     "a",
+	// some comment
 	group2bbbb: "b",
 
 	group3:    "a",

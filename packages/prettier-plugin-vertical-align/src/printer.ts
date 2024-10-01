@@ -31,7 +31,7 @@ export const printer: Printer = {
 		// }
 
 		if (node.type === "Program") {
-			// 	console.log("node", inspect(node.body, { depth: 10 }));
+			// console.log("node", inspect(node.body, { depth: 10 }));
 		}
 
 		if (node[keyLengthSymbol]) {
@@ -82,13 +82,14 @@ export const printer: Printer = {
 				.filter((node: Node) => node.key.loc.start.line === node.key.loc.end.line && !node.shorthand && !node.method);
 
 			for (const prop of properties) {
-				if (prevLine === prop.key.loc.start.line) {
+				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
+				if (prevLine === propStart) {
 					// Multiple properties on the same line
 					return getOriginalPrinter().print(path, options, _print, ...args);
 				}
 				if (
 					prevLine === -Infinity ||
-					(options.alignInGroups === "always" && prevLine !== prop.key.loc.start.line - 1)
+					(options.alignInGroups === "always" && prevLine !== propStart - 1)
 				) {
 					groups.push([]);
 				}
