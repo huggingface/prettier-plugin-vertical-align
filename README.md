@@ -1,6 +1,6 @@
 # prettier-plugin-vertical-align
 
-Aligns object properties and interface members vertically for JS/TS code.
+Align object properties and interface members vertically for JS/TS code.
 
 ## Example
 
@@ -63,6 +63,6 @@ const x = {
 	group3bb: { 
 		x: 1,
 	},
-	group5: "b", // new group due to multiline value above 
+	group4: "b", // new group due to multiline value above 
 };
 ```
