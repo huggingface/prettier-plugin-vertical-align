@@ -79,7 +79,7 @@ export const printer: Printer = {
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
-				!isProperty(node)
+				!isProperty(node) || !node[valueField(node)]
 					? node.loc.start.line === node.loc.end.line
 					: node.key.loc.start.line === node[valueField(node)].loc.start.line,
 			);
@@ -95,7 +95,7 @@ export const printer: Printer = {
 				}
 
 				// Shorthands and methods are not aligned but they do not start a new group
-				if (isProperty(prop) && !prop.shorthand && !prop.method) {
+				if (isProperty(prop) && prop[valueField(prop)] && !prop.shorthand && !prop.method) {
 					groups.at(-1)!.push(prop);
 				}
 

@@ -95,4 +95,8 @@ class XClass {
 
 	x?:      1;
 	abcedf?: 1;
+
+	y = 1;
+	// @ts-expect-error implicity-any
+	z;
 }
