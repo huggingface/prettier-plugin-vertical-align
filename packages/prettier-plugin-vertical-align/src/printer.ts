@@ -30,9 +30,9 @@ export const printer: Printer = {
 		// 	console.log("!!COMMENTS");
 		// }
 
-		if (node.type === "Program") {
-			// console.log("node", inspect(node.body, { depth: 10 }));
-		}
+		// if (node.type === "Program") {
+		//   console.log("node", inspect(node.body, { depth: 10 }));
+		// }
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
@@ -58,6 +58,7 @@ export const printer: Printer = {
 							: path.call(_print, valueField(node)),
 					]);
 				}
+				case "PropertyDefinition":
 				case "TSPropertySignature":
 					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
 					return getOriginalPrinter().print(path, options, _print, ...args);
@@ -79,8 +80,7 @@ export const printer: Printer = {
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
 				!isProperty(node)
-					?
-						node.loc.start.line === node.loc.end.line
+					? node.loc.start.line === node.loc.end.line
 					: node.key.loc.start.line === node[valueField(node)].loc.start.line,
 			);
 
@@ -125,14 +125,19 @@ export const printer: Printer = {
 };
 
 function isPropertyContainer(node: AstPath["node"]) {
-	return node.type === "ObjectExpression" || node.type === "TSInterfaceBody" || node.type === "TSTypeLiteral";
+	return (
+		node.type === "ObjectExpression" ||
+		node.type === "TSInterfaceBody" ||
+		node.type === "TSTypeLiteral" ||
+		node.type === "ClassBody"
+	);
 }
 
 function nodeProperties(node: AstPath["node"]) {
 	if (node.type === "ObjectExpression") {
 		return node.properties;
 	}
-	if (node.type === "TSInterfaceBody") {
+	if (node.type === "TSInterfaceBody" || node.type === "ClassBody") {
 		return node.body;
 	}
 	if (node.type === "TSTypeLiteral") {
@@ -143,14 +148,19 @@ function nodeProperties(node: AstPath["node"]) {
 
 function isProperty(node: AstPath["node"]) {
 	// JS has ObjectProperty, TS has Property
-	return node.type === "Property" || node.type === "TSPropertySignature" || node.type === "ObjectProperty";
+	return (
+		node.type === "Property" ||
+		node.type === "TSPropertySignature" ||
+		node.type === "ObjectProperty" ||
+		node.type === "PropertyDefinition"
+	);
 }
 
 function valueField(node: AstPath["node"]) {
 	if (node.type === "Property" || node.type === "ObjectProperty") {
 		return "value";
 	}
-	if (node.type === "TSPropertySignature") {
+if (node.type === "TSPropertySignature" || node.type === "PropertyDefinition") {
 		return "typeAnnotation";
 	}
 	throw new Error(`Unexpected node type: ${node.type}`);

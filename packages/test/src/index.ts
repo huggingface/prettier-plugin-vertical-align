@@ -38,10 +38,6 @@ async function test(...args: any[]) {
 	await using x = diposable();
 }
 
-class X {
-	static test(...args: any[]) {}
-}
-
 async function test2() {
 	const x2 = {
 		a:            1,
@@ -56,7 +52,7 @@ async function test2() {
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz",
 		),
-		sameLine2:    X.test(
+		sameLine2:    XClass.test(
 			"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
 				"abcedfghijkmnopqrstuvwxyz" ||
@@ -93,3 +89,10 @@ const short = {
 	},
 	zz: 1,
 };
+
+class XClass {
+	static test(...args: any[]) {}
+
+	x?:      1;
+	abcedf?: 1;
+}
