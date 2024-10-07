@@ -90,11 +90,24 @@ const short = {
 	zz: 1,
 };
 
-class XClass {
+class Base {
+	readonly fozobar?: 4;
+}
+
+class XClass extends Base {
+	constructor() {
+		super();
+		this.boo = 1;
+	}
 	static test(...args: any[]) {}
 
-	x?:      1;
-	abcedf?: 1;
+	x?:                         1;
+	abcedf?:                    1;
+	private boo:                1;
+	private readonly foobar?:   2;
+	static readonly barfoo?:    3;
+	override readonly fozobar?: 4 = 4;
+	declare readonly foobar2?:  5;
 
 	y = 1;
 	// @ts-expect-error implicity-any

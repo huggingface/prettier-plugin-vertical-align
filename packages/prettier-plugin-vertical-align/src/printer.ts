@@ -36,11 +36,7 @@ export const printer: Printer = {
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
-			const addedLength =
-				keyLength -
-				(node.key.loc.end.column - node.key.loc.start.column) -
-				(node.optional ? 1 : 0) -
-				(node.computed ? 2 : 0);
+			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - modifierLength(node);
 
 			// console.log("keyLength", keyLength);
 
@@ -107,10 +103,7 @@ export const printer: Printer = {
 				for (const property of group) {
 					keyLength = Math.max(
 						keyLength,
-						property.key.loc.end.column -
-							property.key.loc.start.column +
-							(property.optional ? 1 : 0) +
-							(property.computed ? 2 : 0),
+						property.key.loc.end.column - property.key.loc.start.column + modifierLength(property),
 					);
 				}
 
@@ -160,8 +153,20 @@ function valueField(node: AstPath["node"]) {
 	if (node.type === "Property" || node.type === "ObjectProperty") {
 		return "value";
 	}
-if (node.type === "TSPropertySignature" || node.type === "PropertyDefinition") {
+	if (node.type === "TSPropertySignature" || node.type === "PropertyDefinition") {
 		return "typeAnnotation";
 	}
 	throw new Error(`Unexpected node type: ${node.type}`);
+}
+
+function modifierLength(node: AstPath["node"]) {
+	return (
+		(node.optional ? "?".length : 0) +
+		(node.computed ? "[]".length : 0) +
+		(node.static ? "static ".length : 0) +
+		(node.accessibility ? node.accessibility.length + 1 : 0) +
+		(node.override ? "override ".length : 0) +
+		(node.declare ? "declare ".length : 0) +
+		(node.readonly ? "readonly ".length : 0)
+	);
 }
