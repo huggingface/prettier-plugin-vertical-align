@@ -1,7 +1,7 @@
 {
 	"name": "@huggingface/prettier-plugin-vertical-align",
 	"packageManager": "pnpm@9.11.0",
-	"version": "0.2.2",
+	"version": "0.2.3",
 	"description": "",
 	"scripts": {
 		"test": "pnpm -w test",

@@ -4,8 +4,9 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "prettier --check src",
-		"test:write": "prettier --write src"
+		"format:check": "prettier --check",
+		"test": "prettier --check src/index.ts src/test.js && ./test-parser.sh",
+		"test:write": "prettier --write src/index.ts src/test.js && ./test-parser.sh"
 	},
 	"private": true,
 	"dependencies": {
