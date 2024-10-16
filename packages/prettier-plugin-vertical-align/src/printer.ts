@@ -75,7 +75,7 @@ export const printer: Printer = {
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
-				!isProperty(node) || !node[valueField(node)]
+				!isProperty(node) || !node[valueField(node)]?.loc
 					? node.loc.start.line === node.loc.end.line
 					: node.key.loc.start.line === node[valueField(node)].loc.start.line,
 			);
