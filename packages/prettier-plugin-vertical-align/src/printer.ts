@@ -26,6 +26,11 @@ export const printer: Printer = {
 
 		const node = path.node;
 
+		// See https://github.com/huggingface/prettier-plugin-vertical-align/issues/5
+		if (!node) {
+			return getOriginalPrinter().print(path, options, _print, ...args);
+		}
+
 		// if (node.comments) {
 		// 	console.log("!!COMMENTS");
 		// }
