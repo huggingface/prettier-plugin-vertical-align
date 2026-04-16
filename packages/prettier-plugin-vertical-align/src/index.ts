@@ -28,6 +28,21 @@ export const options: SupportOptions = {
 		],
 		description: "Whether all properties in a group should align the same, or it's on a per-group basis.",
 	},
+	compactFunctionCallPatterns: {
+		type: "string",
+		array: true,
+		category: "Global",
+		default: [{ value: [] }],
+		description:
+			"Regular expression patterns. Matching call expressions are compacted to one line with arguments vertically aligned across consecutive calls.",
+	},
+	compactFunctionCallMaxArgs: {
+		type: "int",
+		category: "Global",
+		default: 0,
+		description:
+			"Max number of arguments to align on a single line. 0 means no limit.",
+	},
 };
 // Do not export printers, as prettier does not allow composing printers.
 // Instead we wrap the original printer

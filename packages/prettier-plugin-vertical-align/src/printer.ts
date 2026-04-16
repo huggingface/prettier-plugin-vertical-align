@@ -1,8 +1,19 @@
-import type { AstPath, Printer } from "prettier";
+import type { AstPath, Doc, Printer } from "prettier";
 import prettier from "prettier";
-// import { inspect } from "node:util";
 const { doc } = prettier;
 import { getOriginalPrinter } from "./original-printer.js";
+import {
+	compactAlignSymbol,
+	enterCompactDepth,
+	exitCompactDepth,
+	flattenDoc,
+	isCompactStatementContainer,
+	isInsideCompact,
+	matchesCompactPattern,
+	printAlignedCompactCall,
+	scanCompactCallGroups,
+	shouldSkipCompact,
+} from "./compact.js";
 
 const { group, softline, line, ifBreak, indent } = doc.builders;
 
@@ -10,20 +21,8 @@ type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
 const typeAnnotationPrefix = Symbol("typeAnnotation");
 
-function shouldMoveCompletelyToNextLine(node: Node) {
-	return node.type === "LogicalExpression";
-
-	// Alternative implementation:
-	// return node.value.type !== "ObjectExpression" &&
-	//   node.value.type !== "ArrayExpression" &&
-	//   node.value.type !== "CallExpression" &&
-	//   node.value.type !== "AwaitExpression";
-}
-
 export const printer: Printer = {
 	print(path, options, _print, ...args) {
-		// const originalPrinter = options.printer as Printer;
-
 		const node = path.node;
 
 		// See https://github.com/huggingface/prettier-plugin-vertical-align/issues/5
@@ -31,24 +30,33 @@ export const printer: Printer = {
 			return getOriginalPrinter().print(path, options, _print, ...args);
 		}
 
-		// if (node.comments) {
-		// 	console.log("!!COMMENTS");
-		// }
+		// Compact call with alignment info — always takes priority
+		if (node[compactAlignSymbol]) {
+			return printAlignedCompactCall(node, path, options, _print);
+		}
 
-		// if (node.type === "Program") {
-		//   console.log("node", inspect(node.body, { depth: 10 }));
-		// }
+		// Inside a compact expression — skip custom alignment, use original printer
+		if (isInsideCompact()) {
+			return getOriginalPrinter().print(path, options, _print, ...args);
+		}
+
+		// Compact pattern match (non-aligned): flatten to single line
+		if (node.type === "CallExpression" && matchesCompactPattern(node, options) && !shouldSkipCompact(node)) {
+			enterCompactDepth();
+			try {
+				return flattenDoc(getOriginalPrinter().print(path, options, _print, ...args));
+			} finally {
+				exitCompactDepth();
+			}
+		}
 
 		if (node[keyLengthSymbol]) {
 			const keyLength = node[keyLengthSymbol];
 			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - modifierLength(node);
 
-			// console.log("keyLength", keyLength);
-
 			switch (node.type) {
 				case "Property":
 				case "ObjectProperty": {
-					// console.log(node.value.type);
 					return group([
 						node.computed ? "[" : "",
 						path.call(_print, "key"),
@@ -77,8 +85,6 @@ export const printer: Printer = {
 			let groups: Node[][] = [];
 			let prevLine = -Infinity;
 
-			// console.log("node", node);
-			// console.log("node", inspect(node, {depth: 10}));
 			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
 				!isProperty(node) || !node[valueField(node)]?.loc
 					? node.loc.start.line === node.loc.end.line
@@ -118,9 +124,26 @@ export const printer: Printer = {
 			}
 		}
 
+		// Scan blocks for consecutive compact call expressions
+		if (isCompactStatementContainer(node)) {
+			scanCompactCallGroups(node, options);
+		}
+
 		return getOriginalPrinter().print(path, options, _print, ...args);
 	},
 };
+
+// --- Existing helpers ---
+
+function shouldMoveCompletelyToNextLine(node: Node) {
+	return node.type === "LogicalExpression";
+
+	// Alternative implementation:
+	// return node.value.type !== "ObjectExpression" &&
+	//   node.value.type !== "ArrayExpression" &&
+	//   node.value.type !== "CallExpression" &&
+	//   node.value.type !== "AwaitExpression";
+}
 
 function isPropertyContainer(node: AstPath["node"]) {
 	return (

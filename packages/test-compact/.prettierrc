@@ -1,0 +1,9 @@
+{
+	"printWidth": 120,
+	"tabWidth": 2,
+	"useTabs": true,
+	"alignInGroups": "always",
+	"compactFunctionCallPatterns": ["^foo\\.", "^console\\."],
+	"compactFunctionCallMaxArgs": 0,
+	"plugins": ["@huggingface/prettier-plugin-vertical-align"]
+}
