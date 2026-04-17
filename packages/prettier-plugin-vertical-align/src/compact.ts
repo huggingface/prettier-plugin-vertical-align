@@ -22,44 +22,27 @@ export function isInsideCompact(): boolean {
 	return compactDepth > 0;
 }
 
-// --- Compact align config ---
+// --- Compact pattern config ---
 
-let cachedPatterns: { input: string[]; regexps: RegExp[] } | null = null;
+let cachedConfig: { input: string[]; regexps: RegExp[]; maxLen: number } | null = null;
 
-function parseCompactPatterns(patterns: string[]): RegExp[] {
-	if (!patterns || patterns.length === 0) return [];
-	if (cachedPatterns && cachedPatterns.input === patterns) return cachedPatterns.regexps;
+function getCompactConfig(patterns: string[]): { regexps: RegExp[]; maxLen: number } {
+	if (!patterns || patterns.length === 0) return { regexps: [], maxLen: 0 };
+	if (cachedConfig && cachedConfig.input === patterns) return cachedConfig;
 	const regexps = patterns.filter(Boolean).map((p) => new RegExp(p));
-	cachedPatterns = { input: patterns, regexps };
-	return regexps;
-}
-
-let cachedLineOffsets: { text: string; offsets: number[] } | null = null;
-
-function getLineOffsets(text: string): number[] {
-	if (cachedLineOffsets && cachedLineOffsets.text === text) return cachedLineOffsets.offsets;
-	const offsets = [0];
-	for (let i = 0; i < text.length; i++) {
-		if (text[i] === "\n") offsets.push(i + 1);
-	}
-	cachedLineOffsets = { text, offsets };
-	return offsets;
-}
-
-function getNodeSourcePrefix(node: Node, originalText: string, lineOffsets: number[], maxLen: number): string {
-	if (!node.loc) return "";
-	const charOffset = lineOffsets[node.loc.start.line - 1] + node.loc.start.column;
-	return originalText.slice(charOffset, charOffset + maxLen);
+	const maxLen = Math.max(...regexps.map((r) => r.source.length)) + 20;
+	const result = { input: patterns, regexps, maxLen };
+	cachedConfig = result;
+	return result;
 }
 
 export function matchesCompactPattern(node: Node, options: any): boolean {
-	const patterns = parseCompactPatterns(options.compactFunctionCallPatterns);
-	if (patterns.length === 0) return false;
-	if (!node.loc) return false;
-	const lineOffsets = getLineOffsets(options.originalText);
-	const maxLen = Math.max(...patterns.map((r) => r.source.length)) + 20;
-	const prefix = getNodeSourcePrefix(node, options.originalText, lineOffsets, maxLen);
-	return patterns.some((r) => r.test(prefix));
+	const { regexps, maxLen } = getCompactConfig(options.compactFunctionCallPatterns);
+	if (!regexps.length) return false;
+	const start: number | undefined = node.start ?? node.range?.[0];
+	if (start == null) return false;
+	const prefix = options.originalText.slice(start, start + maxLen);
+	return regexps.some((r) => r.test(prefix));
 }
 
 // --- Doc flattening ---
@@ -73,27 +56,20 @@ export function flattenDoc(d: Doc): Doc {
 		case "line":
 			return (d as any).soft ? "" : " ";
 		case "break-parent":
+		case "line-suffix-boundary":
 			return "";
 		case "group":
-			return flattenDoc((d as any).contents);
 		case "indent":
-			return flattenDoc((d as any).contents);
 		case "align":
+		case "indent-if-break":
+		case "line-suffix":
+		case "label":
 			return flattenDoc((d as any).contents);
 		case "if-break":
 			return flattenDoc((d as any).flatContents ?? "");
 		case "fill":
-			return (d as any).parts.map(flattenDoc);
 		case "concat":
 			return (d as any).parts.map(flattenDoc);
-		case "indent-if-break":
-			return flattenDoc((d as any).contents);
-		case "line-suffix":
-			return flattenDoc((d as any).contents);
-		case "line-suffix-boundary":
-			return "";
-		case "label":
-			return flattenDoc((d as any).contents);
 		default:
 			return d;
 	}
@@ -119,58 +95,40 @@ function nodeHasComments(node: Node): boolean {
 	return false;
 }
 
-function callHasBlockFunctionArg(node: Node): boolean {
-	return node.arguments?.some(
-		(arg: Node) =>
-			arg.type === "FunctionExpression" ||
-			(arg.type === "ArrowFunctionExpression" && arg.body?.type === "BlockStatement"),
-	);
-}
-
 export function shouldSkipCompact(node: Node): boolean {
-	return nodeHasComments(node) || callHasBlockFunctionArg(node);
+	return (
+		nodeHasComments(node) ||
+		node.arguments?.some(
+			(arg: Node) =>
+				arg.type === "FunctionExpression" ||
+				(arg.type === "ArrowFunctionExpression" && arg.body?.type === "BlockStatement"),
+		)
+	);
 }
 
 // --- Compact call alignment ---
 
-function isStatementContainer(node: Node): boolean {
-	return node.type === "Program" || node.type === "BlockStatement";
-}
-
-export function isCompactStatementContainer(node: Node): boolean {
-	return isStatementContainer(node);
-}
-
-function getCallFromStatement(child: Node): Node | null {
-	if (child.type === "ExpressionStatement" && child.expression?.type === "CallExpression") {
-		return child.expression;
-	}
-	return null;
-}
-
 export function scanCompactCallGroups(node: Node, options: any): void {
-	const patterns = parseCompactPatterns(options.compactFunctionCallPatterns);
-	if (patterns.length === 0) return;
+	if (!getCompactConfig(options.compactFunctionCallPatterns).regexps.length) return;
 	const maxArgs: number = options.compactFunctionCallMaxArgs || Infinity;
 
 	const children: Node[] = node.body;
 	if (!children || !Array.isArray(children)) return;
 
-	const lineOffsets = getLineOffsets(options.originalText);
-	const maxLen = Math.max(...patterns.map((r) => r.source.length)) + 20;
-
 	let groups: Node[][] = [];
 	let prevLine = -Infinity;
 
 	for (const child of children) {
-		const call = getCallFromStatement(child);
+		const call =
+			child.type === "ExpressionStatement" && child.expression?.type === "CallExpression"
+				? child.expression
+				: null;
 		if (!call || !call.arguments || call.arguments.length === 0) {
 			prevLine = -Infinity;
 			continue;
 		}
 
-		const prefix = getNodeSourcePrefix(call, options.originalText, lineOffsets, maxLen);
-		if (!patterns.some((r) => r.test(prefix)) || shouldSkipCompact(call)) {
+		if (!matchesCompactPattern(call, options) || shouldSkipCompact(call)) {
 			prevLine = -Infinity;
 			continue;
 		}
@@ -214,10 +172,35 @@ export function scanCompactCallGroups(node: Node, options: any): void {
 	}
 }
 
+/**
+ * Appends printed args to `parts` with column-aligned padding separators.
+ * `offset` maps printed arg index to original argument/argWidths index
+ * (0 for normal args, 1 for remaining args after an array first-arg).
+ */
+function pushPaddedArgs(
+	parts: Doc[],
+	printedArgs: Doc[],
+	nodeArgs: Node[],
+	argWidths: number[],
+	offset: number,
+): void {
+	for (let i = 0; i < printedArgs.length; i++) {
+		parts.push(printedArgs[i]);
+		if (i < printedArgs.length - 1) {
+			const ai = i + offset;
+			if (ai < argWidths.length) {
+				const argWidth = nodeArgs[ai].loc.end.column - nodeArgs[ai].loc.start.column;
+				parts.push("," + " ".repeat(Math.max(argWidths[ai] - argWidth, 0) + 1));
+			} else {
+				parts.push(", ");
+			}
+		}
+	}
+}
+
 export function printAlignedCompactCall(
 	node: Node,
 	path: AstPath,
-	options: any,
 	_print: (path: AstPath) => Doc,
 ): Doc {
 	const alignInfo = node[compactAlignSymbol] as { argWidths: number[]; maxCalleeWidth: number };
@@ -225,9 +208,7 @@ export function printAlignedCompactCall(
 	const calleeWidth = node.callee.loc.end.column - node.callee.loc.start.column;
 	const calleePadding = alignInfo.maxCalleeWidth - calleeWidth;
 
-	const firstArgIsArray = node.arguments[0]?.type === "ArrayExpression";
-
-	if (firstArgIsArray) {
+	if (node.arguments[0]?.type === "ArrayExpression") {
 		const elements: Doc[] = [];
 		path.each((elemPath: AstPath, index: number) => {
 			if (index > 0) elements.push(",", hardline);
@@ -246,20 +227,7 @@ export function printAlignedCompactCall(
 		const paddingAfterArray = alignInfo.maxCalleeWidth + (alignInfo.argWidths[0] || 0) + 1;
 
 		const parts: Doc[] = [callee, " ".repeat(calleePadding) + "(", arrayDoc, ",", " ".repeat(paddingAfterArray)];
-		for (let i = 0; i < remainingArgs.length; i++) {
-			parts.push(remainingArgs[i]);
-			if (i < remainingArgs.length - 1) {
-				const argIdx = i + 1;
-				if (argIdx < alignInfo.argWidths.length) {
-					const arg = node.arguments[i + 1];
-					const argWidth = arg.loc.end.column - arg.loc.start.column;
-					const padding = Math.max(alignInfo.argWidths[argIdx] - argWidth, 0);
-					parts.push("," + " ".repeat(padding + 1));
-				} else {
-					parts.push(", ");
-				}
-			}
-		}
+		pushPaddedArgs(parts, remainingArgs, node.arguments, alignInfo.argWidths, 1);
 		parts.push(")");
 		return parts;
 	}
@@ -270,19 +238,7 @@ export function printAlignedCompactCall(
 	}, "arguments");
 
 	const parts: Doc[] = [callee, " ".repeat(calleePadding) + "("];
-	for (let i = 0; i < args.length; i++) {
-		parts.push(args[i]);
-		if (i < args.length - 1) {
-			if (i < alignInfo.argWidths.length) {
-				const arg = node.arguments[i];
-				const argWidth = arg.loc.end.column - arg.loc.start.column;
-				const padding = Math.max(alignInfo.argWidths[i] - argWidth, 0);
-				parts.push("," + " ".repeat(padding + 1));
-			} else {
-				parts.push(", ");
-			}
-		}
-	}
+	pushPaddedArgs(parts, args, node.arguments, alignInfo.argWidths, 0);
 	parts.push(")");
 	return parts;
 }

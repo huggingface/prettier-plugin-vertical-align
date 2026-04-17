@@ -6,16 +6,12 @@ import {
 	compactAlignSymbol,
 	enterCompactDepth,
 	exitCompactDepth,
-	flattenDoc,
-	isCompactStatementContainer,
 	isInsideCompact,
-	matchesCompactPattern,
 	printAlignedCompactCall,
 	scanCompactCallGroups,
-	shouldSkipCompact,
 } from "./compact.js";
 
-const { group, softline, line, ifBreak, indent } = doc.builders;
+const { group, line, ifBreak, indent } = doc.builders;
 
 type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
@@ -32,22 +28,17 @@ export const printer: Printer = {
 
 		// Compact call with alignment info — always takes priority
 		if (node[compactAlignSymbol]) {
-			return printAlignedCompactCall(node, path, options, _print);
+			try {
+				enterCompactDepth();
+				return printAlignedCompactCall(node, path, _print);
+			} finally {
+				exitCompactDepth();
+			}
 		}
 
 		// Inside a compact expression — skip custom alignment, use original printer
 		if (isInsideCompact()) {
 			return getOriginalPrinter().print(path, options, _print, ...args);
-		}
-
-		// Compact pattern match (non-aligned): flatten to single line
-		if (node.type === "CallExpression" && matchesCompactPattern(node, options) && !shouldSkipCompact(node)) {
-			enterCompactDepth();
-			try {
-				return flattenDoc(getOriginalPrinter().print(path, options, _print, ...args));
-			} finally {
-				exitCompactDepth();
-			}
 		}
 
 		if (node[keyLengthSymbol]) {
@@ -125,7 +116,7 @@ export const printer: Printer = {
 		}
 
 		// Scan blocks for consecutive compact call expressions
-		if (isCompactStatementContainer(node)) {
+		if (node.type === "Program" || node.type === "BlockStatement") {
 			scanCompactCallGroups(node, options);
 		}
 

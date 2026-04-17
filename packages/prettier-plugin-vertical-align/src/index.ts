@@ -1,4 +1,4 @@
-import type { Parser, ParserOptions, Printer, SupportOption, SupportOptions } from "prettier";
+import type { Parser, Printer, SupportOptions } from "prettier";
 import tsParsers from "prettier/parser-typescript.js";
 import babelParsers from "prettier/parser-babel.js";
 import { printer } from "./printer.js";
