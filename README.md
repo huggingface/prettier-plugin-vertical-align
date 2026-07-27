@@ -66,3 +66,5 @@ const x = {
 	group4: "b", // new group due to multiline value above 
 };
 ```
+
+Only values that are always printed on several lines start a new group (an object written over several lines, a function body, a multiline template literal, ...). A value that ends up on several lines only because the line is too long keeps its group: whether it fits depends on the padding that was just added, so using it would make the formatting oscillate between two states on every run.

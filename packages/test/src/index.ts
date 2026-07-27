@@ -113,3 +113,14 @@ class XClass extends Base {
 	// @ts-expect-error implicity-any
 	z;
 }
+
+// Used to oscillate: the padding pushes the value over the print width, prettier moves the value to the
+// next line, and on the next run the property is not detected as alignable anymore.
+declare const aLongCondition: boolean;
+declare const anotherConditionThatMakesTheLineTooLongForTheWidth: boolean;
+
+const alignmentIsStable = {
+	key:
+		aLongCondition && anotherConditionThatMakesTheLineTooLongForTheWidth,
+	aVeryMuchLongerKey: 1,
+};

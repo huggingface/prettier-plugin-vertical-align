@@ -10,14 +10,77 @@ type Node = AstPath["node"];
 const keyLengthSymbol = Symbol("keyLength");
 const typeAnnotationPrefix = Symbol("typeAnnotation");
 
-function shouldMoveCompletelyToNextLine(node: Node) {
-	return node.type === "LogicalExpression";
+/**
+ * Mirrors prettier's own `shouldBreakAfterOperator` (src/language-js/print/assignment.js): those are the
+ * values that prettier moves to the line below the `:` when the property does not fit.
+ *
+ * It must only depend on the AST and on the options, never on how the value happens to be laid out in the
+ * input, otherwise formatting is not idempotent.
+ */
+function shouldMoveCompletelyToNextLine(value: Node, keyLength: number, options: { tabWidth: number }): boolean {
+	if (!value) {
+		return false;
+	}
 
-	// Alternative implementation:
-	// return node.value.type !== "ObjectExpression" &&
-	//   node.value.type !== "ArrayExpression" &&
-	//   node.value.type !== "CallExpression" &&
-	//   node.value.type !== "AwaitExpression";
+	if (isBinaryish(value) && !shouldInlineLogicalExpression(value)) {
+		return true;
+	}
+
+	switch (value.type) {
+		case "StringLiteralTypeAnnotation":
+		case "SequenceExpression":
+			return true;
+		case "TSConditionalType":
+		case "ConditionalExpression": {
+			const { test } = value;
+			return isBinaryish(test) && !shouldInlineLogicalExpression(test);
+		}
+		case "ClassExpression":
+			return !!value.decorators?.length;
+	}
+
+	// Prettier keeps the value on the same line when the key is short
+	if (keyLength <= options.tabWidth) {
+		return false;
+	}
+
+	let node = value;
+	while (node.type === "UnaryExpression" || node.type === "TSNonNullExpression") {
+		node = node.argument ?? node.expression;
+	}
+
+	return isStringLiteral(node) || isMemberExpressionChain(node);
+}
+
+function isBinaryish(node: Node) {
+	return node?.type === "BinaryExpression" || node?.type === "LogicalExpression";
+}
+
+function shouldInlineLogicalExpression(node: Node) {
+	if (node.type !== "LogicalExpression") {
+		return false;
+	}
+	if (node.right.type === "ObjectExpression" && node.right.properties.length > 0) {
+		return true;
+	}
+	if (node.right.type === "ArrayExpression" && node.right.elements.length > 0) {
+		return true;
+	}
+	return false;
+}
+
+function isStringLiteral(node: Node) {
+	return node?.type === "StringLiteral" || (node?.type === "Literal" && typeof node.value === "string");
+}
+
+function isMemberExpressionChain(node: Node): boolean {
+	if (node?.type !== "MemberExpression" && node?.type !== "OptionalMemberExpression") {
+		return false;
+	}
+	if (node.object.type === "Identifier") {
+		return true;
+	}
+	return isMemberExpressionChain(node.object);
 }
 
 export const printer: Printer = {
@@ -54,7 +117,7 @@ export const printer: Printer = {
 						path.call(_print, "key"),
 						node.computed ? "]" : "",
 						":" + " ".repeat(addedLength + 1),
-						shouldMoveCompletelyToNextLine(node[valueField(node)])
+						shouldMoveCompletelyToNextLine(node[valueField(node)], keyLength, options)
 							? ifBreak(indent(group([line, path.call(_print, valueField(node))])), path.call(_print, valueField(node)))
 							: path.call(_print, valueField(node)),
 					]);
@@ -75,23 +138,24 @@ export const printer: Printer = {
 
 		if (isPropertyContainer(node)) {
 			let groups: Node[][] = [];
-			let prevLine = -Infinity;
 
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
-			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
-				!isProperty(node) || !node[valueField(node)]?.loc
-					? node.loc.start.line === node.loc.end.line
-					: node.key.loc.start.line === node[valueField(node)].loc.start.line,
-			);
+			const properties: Node[] = nodeProperties(node);
 
+			// The container is only aligned if it is printed on multiple lines. Prettier decides that from the
+			// presence of a newline between the "{" and the first member in the *original* text, so this
+			// predicate is stable under re-formatting.
+			if (properties.length && !hasNewlineBeforeFirstMember(node, properties[0], options)) {
+				return getOriginalPrinter().print(path, options, _print, ...args);
+			}
+
+			let prev: Node | undefined;
 			for (const prop of properties) {
-				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
-				if (prevLine === propStart) {
-					// Multiple properties on the same line
-					return getOriginalPrinter().print(path, options, _print, ...args);
-				}
-				if (prevLine === -Infinity || (options.alignInGroups === "always" && prevLine !== propStart - 1)) {
+				if (
+					!prev ||
+					(options.alignInGroups === "always" && (hasBlankLineBetween(prev, prop, options) || forcesBreak(prev, options)))
+				) {
 					groups.push([]);
 				}
 
@@ -100,7 +164,7 @@ export const printer: Printer = {
 					groups.at(-1)!.push(prop);
 				}
 
-				prevLine = prop.loc.start.line;
+				prev = prop;
 			}
 
 			for (const group of groups.filter((group) => group.length > 1)) {
@@ -174,4 +238,83 @@ function modifierLength(node: AstPath["node"]) {
 		(node.declare ? "declare ".length : 0) +
 		(node.readonly ? "readonly ".length : 0)
 	);
+}
+
+function nodeStart(node: Node): number {
+	return node.range?.[0] ?? node.start;
+}
+function nodeEnd(node: Node): number {
+	return node.range?.[1] ?? node.end;
+}
+function startWithComments(node: Node): number {
+	return node.comments?.length ? Math.min(nodeStart(node), ...node.comments.map(nodeStart)) : nodeStart(node);
+}
+function endWithComments(node: Node): number {
+	return node.comments?.length ? Math.max(nodeEnd(node), ...node.comments.map(nodeEnd)) : nodeEnd(node);
+}
+
+function hasNewlineBeforeFirstMember(container: Node, firstMember: Node, options: { originalText: string }) {
+	return options.originalText
+		.slice(nodeStart(container), startWithComments(firstMember))
+		.includes("\n");
+}
+
+function hasBlankLineBetween(a: Node, b: Node, options: { originalText: string }) {
+	const between = options.originalText.slice(endWithComments(a), startWithComments(b));
+	return (between.match(/\n/g)?.length ?? 0) > 1;
+}
+
+/**
+ * Whether this property is guaranteed to be printed on several lines, whatever the print width is.
+ * Only *forced* breaks are taken into account: a break caused by the line being too long must not be
+ * used to make layout decisions, otherwise the decision depends on the previous run's output.
+ */
+function forcesBreak(prop: Node, options: { originalText: string }): boolean {
+	const value = isProperty(prop) ? prop[valueField(prop)] : prop;
+	return value ? subtreeForcesBreak(value, options) : false;
+}
+
+const OBJECT_LIKE = new Set([
+	"ObjectExpression",
+	"ObjectPattern",
+	"TSTypeLiteral",
+	"TSInterfaceBody",
+	"ClassBody",
+	"RecordExpression",
+]);
+
+function subtreeForcesBreak(node: Node, options: { originalText: string }): boolean {
+	if (!node || typeof node !== "object") {
+		return false;
+	}
+	if (Array.isArray(node)) {
+		return node.some((child) => subtreeForcesBreak(child, options));
+	}
+	if (!node.type) {
+		return false;
+	}
+	if (node.comments?.length) {
+		return true;
+	}
+	if (OBJECT_LIKE.has(node.type)) {
+		const members = node.properties ?? node.body ?? node.members ?? [];
+		if (members.length && hasNewlineBeforeFirstMember(node, members[0], options)) {
+			return true;
+		}
+	}
+	if (node.type === "BlockStatement" && node.body?.length) {
+		return true;
+	}
+	if (node.type === "TemplateLiteral" && options.originalText.slice(nodeStart(node), nodeEnd(node)).includes("\n")) {
+		return true;
+	}
+	for (const key of Object.keys(node)) {
+		if (key === "loc" || key === "range" || key === "parent" || key === "tokens") {
+			continue;
+		}
+		if (subtreeForcesBreak(node[key], options)) {
+			return true;
+		}
+	}
+	return false;
 }
