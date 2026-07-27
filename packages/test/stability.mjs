@@ -74,6 +74,10 @@ function random(max) {
 	return Math.floor((((t ^ (t >>> 14)) >>> 0) / 0x100000000) * max);
 }
 const pick = (values) => values[random(values.length)];
+// when set, every generated key has exactly this length, whatever the nesting level
+let fixedKeyLength = 0;
+const key = (index) =>
+	`${name(fixedKeyLength ? fixedKeyLength - 1 : 1 + random(14))}k${index}`;
 const name = (length) => "a".repeat(Math.max(1, length));
 
 function randomValue(budget) {
@@ -128,7 +132,7 @@ function randomValue(budget) {
 		case "object": {
 			let object = "{\n";
 			for (let i = 0; i < 2 + random(3); i++) {
-				object += `\tk${name(random(14))}: ${randomValue(b - 20)},\n`;
+				object += `\t${key(i)}: ${randomValue(b - 20)},\n`;
 			}
 			return `${object}}`;
 		}
@@ -139,10 +143,11 @@ function randomValue(budget) {
  * Objects with random key lengths and values, at random indentation levels: some of them land exactly on the
  * print width limit, which is where the plugin used to oscillate.
  */
-function randomObject() {
+function randomObject(keyLength = 0) {
+	fixedKeyLength = keyLength;
 	let text = "const x = {\n";
 	for (let i = 0; i < 2 + random(5); i++) {
-		text += `\tk${name(random(18))}: ${randomValue(60 + random(50))},\n`;
+		text += `\t${key(i)}: ${randomValue(60 + random(50))},\n`;
 	}
 	text += "};\n";
 
@@ -177,11 +182,74 @@ async function checkGeneratedObjects() {
 	}
 }
 
+/**
+ * When every key of an object has the same length, we have no space to add anywhere: the output must then be
+ * exactly the one of prettier. More generally, a property that needs no padding is printed by prettier
+ * itself, so that we only ever change the lines we have something to add to.
+ */
+async function checkGeneratedObjectsMatchPrettier() {
+	seed = 0x5678;
+	for (let i = 0; i < 400 && failures.length < 5; i++) {
+		const text = randomObject(3 + random(18));
+		const options = {
+			parser:     "typescript",
+			printWidth: 120,
+			tabWidth:   2,
+			useTabs:    true,
+		};
+		const expected = await prettier.format(text, options);
+		const actual = await prettier.format(text, {
+			...options,
+			plugins: ["@huggingface/prettier-plugin-vertical-align"],
+		});
+
+		if (expected !== actual) {
+			failures.push(
+				`generated object #${i} has keys of the same length but is not formatted like prettier:\n${text}\n--- prettier ---\n${expected}--- with the plugin ---\n${actual}`,
+			);
+		}
+	}
+}
+
+/**
+ * Sources whose keys are not printed the way they are written: `quoteProps` adds or removes the quotes, so
+ * the padding has to be computed on the printed key, otherwise the file changes again on the next run.
+ */
+async function checkQuotedKeys() {
+	const cases = [
+		// prettier removes the quotes it does not need
+		{ source: `const x = {\n\t"aaa": 1,\n\t"b": 2,\n};\n`, options: {} },
+		// one key needs quotes, so prettier quotes all of them
+		{
+			source:  `const x = {\n\t"a-b": 1,\n\taaa: 2,\n\tb: 3,\n};\n`,
+			options: { quoteProps: "consistent" },
+		},
+		// the quotes are kept as they are written
+		{
+			source:  `const x = {\n\t"aaa": 1,\n\tb: 2,\n};\n`,
+			options: { quoteProps: "preserve" },
+		},
+	];
+
+	for (const [index, { source, options }] of cases.entries()) {
+		await checkStable(`quoted keys #${index}\n${source}`, source, {
+			parser:     "typescript",
+			plugins:    ["@huggingface/prettier-plugin-vertical-align"],
+			printWidth: 120,
+			tabWidth:   2,
+			useTabs:    true,
+			...options,
+		});
+	}
+}
+
 await checkFixtures();
+await checkQuotedKeys();
 await checkGeneratedObjects();
+await checkGeneratedObjectsMatchPrettier();
 
 if (failures.length) {
-	console.error(`Formatting is not stable:\n\n${failures.join("\n\n")}`);
+	console.error(`${failures.join("\n\n")}`);
 	process.exit(1);
 }
 

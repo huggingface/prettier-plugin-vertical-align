@@ -1,87 +1,10 @@
-import type { AstPath, Printer } from "prettier";
-import prettier from "prettier";
-// import { inspect } from "node:util";
-const { doc } = prettier;
+import type { AstPath, Doc, Printer } from "prettier";
 import { getOriginalPrinter } from "./original-printer.js";
 
-const { group, softline, line, ifBreak, indent } = doc.builders;
-
 type Node = AstPath["node"];
-const keyLengthSymbol = Symbol("keyLength");
-const typeAnnotationPrefix = Symbol("typeAnnotation");
 
-/**
- * Mirrors prettier's own `shouldBreakAfterOperator` (src/language-js/print/assignment.js): those are the
- * values that prettier moves to the line below the `:` when the property does not fit.
- *
- * It must only depend on the AST and on the options, never on how the value happens to be laid out in the
- * input, otherwise formatting is not idempotent.
- */
-function shouldMoveCompletelyToNextLine(value: Node, keyLength: number, options: { tabWidth: number }): boolean {
-	if (!value) {
-		return false;
-	}
-
-	if (isBinaryish(value) && !shouldInlineLogicalExpression(value)) {
-		return true;
-	}
-
-	switch (value.type) {
-		case "StringLiteralTypeAnnotation":
-		case "SequenceExpression":
-			return true;
-		case "TSConditionalType":
-		case "ConditionalExpression": {
-			const { test } = value;
-			return isBinaryish(test) && !shouldInlineLogicalExpression(test);
-		}
-		case "ClassExpression":
-			return !!value.decorators?.length;
-	}
-
-	// Prettier keeps the value on the same line when the key is short
-	if (keyLength <= options.tabWidth) {
-		return false;
-	}
-
-	let node = value;
-	while (node.type === "UnaryExpression" || node.type === "TSNonNullExpression") {
-		node = node.argument ?? node.expression;
-	}
-
-	return isStringLiteral(node) || isMemberExpressionChain(node);
-}
-
-function isBinaryish(node: Node) {
-	return node?.type === "BinaryExpression" || node?.type === "LogicalExpression";
-}
-
-function shouldInlineLogicalExpression(node: Node) {
-	if (node.type !== "LogicalExpression") {
-		return false;
-	}
-	if (node.right.type === "ObjectExpression" && node.right.properties.length > 0) {
-		return true;
-	}
-	if (node.right.type === "ArrayExpression" && node.right.elements.length > 0) {
-		return true;
-	}
-	return false;
-}
-
-function isStringLiteral(node: Node) {
-	return node?.type === "StringLiteral" || (node?.type === "Literal" && typeof node.value === "string");
-}
-
-function isMemberExpressionChain(node: Node): boolean {
-	if (node?.type !== "MemberExpression" && node?.type !== "OptionalMemberExpression") {
-		return false;
-	}
-	if (node.object.type === "Identifier") {
-		return true;
-	}
-	return isMemberExpressionChain(node.object);
-}
+/** Number of spaces to add after the ":" of a property, set by the printer of its parent. */
+const paddingSymbol = Symbol("padding");
 
 export const printer: Printer = {
 	print(path, options, _print, ...args) {
@@ -102,38 +25,11 @@ export const printer: Printer = {
 		//   console.log("node", inspect(node.body, { depth: 10 }));
 		// }
 
-		if (node[keyLengthSymbol]) {
-			const keyLength = node[keyLengthSymbol];
-			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - modifierLength(node);
-
-			// console.log("keyLength", keyLength);
-
-			switch (node.type) {
-				case "Property":
-				case "ObjectProperty": {
-					// console.log(node.value.type);
-					return group([
-						node.computed ? "[" : "",
-						path.call(_print, "key"),
-						node.computed ? "]" : "",
-						":" + " ".repeat(addedLength + 1),
-						shouldMoveCompletelyToNextLine(node[valueField(node)], keyLength, options)
-							? ifBreak(indent(group([line, path.call(_print, valueField(node))])), path.call(_print, valueField(node)))
-							: path.call(_print, valueField(node)),
-					]);
-				}
-				case "PropertyDefinition":
-				case "TSPropertySignature":
-					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
-					return getOriginalPrinter().print(path, options, _print, ...args);
-				default:
-					throw new Error(`Unexpected node type: ${node.type}`);
-			}
-		}
-
-		if (node[typeAnnotationPrefix]) {
-			const addedLength = node[typeAnnotationPrefix];
-			return group([": " + " ".repeat(addedLength), path.call(_print, "typeAnnotation")]);
+		const padding = node[paddingSymbol];
+		if (padding) {
+			// Let prettier print the property - so that the key, the quotes around it and the layout of the value
+			// are exactly the ones prettier would use - and only widen the ":" separator of the doc it returns.
+			return addPaddingAfterColon(getOriginalPrinter().print(path, options, _print, ...args), padding);
 		}
 
 		if (isPropertyContainer(node)) {
@@ -167,17 +63,16 @@ export const printer: Printer = {
 				prev = prop;
 			}
 
+			const quoteEveryKey = needsQuoteProps(properties, options);
+
 			for (const group of groups.filter((group) => group.length > 1)) {
-				let keyLength = 0;
-				for (const property of group) {
-					keyLength = Math.max(
-						keyLength,
-						property.key.loc.end.column - property.key.loc.start.column + modifierLength(property),
-					);
-				}
+				const keyLengths = new Map<Node, number>(
+					group.map((property) => [property, keyLength(property, options, quoteEveryKey)]),
+				);
+				const alignedLength = Math.max(...keyLengths.values());
 
 				for (const property of group) {
-					property[keyLengthSymbol] = keyLength;
+					property[paddingSymbol] = alignedLength - keyLengths.get(property)!;
 				}
 			}
 		}
@@ -226,6 +121,84 @@ function valueField(node: AstPath["node"]) {
 		return "typeAnnotation";
 	}
 	throw new Error(`Unexpected node type: ${node.type}`);
+}
+
+/**
+ * Widens the ":" separating the key from the value in the doc prettier printed for a property, which is the
+ * only thing this plugin changes. Prettier trims the trailing spaces of a line, so the padding disappears by
+ * itself when the value is moved below the ":".
+ */
+function addPaddingAfterColon(doc: Doc, padding: number): Doc {
+	const spaces = " ".repeat(padding);
+
+	// The separator is a part of its own in the doc of a property: `[key, ":", " ", value]` for an object
+	// property, `[key, [": ", type]]` for an interface member, ...
+	function patch(parts: Doc[]): Doc[] | undefined {
+		for (const [index, part] of parts.entries()) {
+			if (part === ":" || part === ": ") {
+				const patched = [...parts];
+				patched[index] = `:${spaces}${part.slice(1)}`;
+				return patched;
+			}
+			if (Array.isArray(part)) {
+				const patchedPart = patch(part);
+				if (patchedPart) {
+					const patched = [...parts];
+					patched[index] = patchedPart;
+					return patched;
+				}
+			}
+		}
+	}
+
+	if (Array.isArray(doc)) {
+		return patch(doc) ?? doc;
+	}
+	if (typeof doc === "object" && doc.type === "group" && Array.isArray(doc.contents)) {
+		const patched = patch(doc.contents);
+		return patched ? { ...doc, contents: patched } : doc;
+	}
+	return doc;
+}
+
+/**
+ * The width of the key as prettier will print it: `quoteProps` can add or remove the quotes around it, and we
+ * have to align on what is printed, not on what was written.
+ */
+function keyLength(property: Node, options: { quoteProps?: string }, quoteEveryKey: boolean) {
+	const { key } = property;
+	const modifiers = modifierLength(property);
+
+	if (!property.computed) {
+		if (isStringKey(key)) {
+			if (!quoteEveryKey && options.quoteProps !== "preserve" && isIdentifierName(key.value)) {
+				return key.value.length + modifiers;
+			}
+		} else if (quoteEveryKey && key.type === "Identifier") {
+			return key.name.length + '""'.length + modifiers;
+		}
+	}
+
+	return key.loc.end.column - key.loc.start.column + modifiers;
+}
+
+/** Prettier's `quoteProps: "consistent"`: one key needing quotes means every key is quoted. */
+function needsQuoteProps(properties: Node[], options: { quoteProps?: string }) {
+	return (
+		options.quoteProps === "consistent" &&
+		properties.some(
+			(property) =>
+				isProperty(property) && !property.computed && isStringKey(property.key) && !isIdentifierName(property.key.value),
+		)
+	);
+}
+
+function isStringKey(key: Node) {
+	return key?.type === "StringLiteral" || (key?.type === "Literal" && typeof key.value === "string");
+}
+
+function isIdentifierName(value: string) {
+	return /^(?:[$_\p{ID_Start}])(?:[$\u200C\u200D\p{ID_Continue}])*$/u.test(value);
 }
 
 function modifierLength(node: AstPath["node"]) {
