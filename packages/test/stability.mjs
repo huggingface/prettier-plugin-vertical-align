@@ -280,7 +280,51 @@ async function checkGroupBoundaries() {
 	}
 }
 
+/**
+ * Every kind of member must actually end up aligned: a padding we compute but fail to print is invisible in
+ * the fixtures as long as the member with the longest key is the one prettier prints unchanged.
+ */
+async function checkColumnsAreAligned() {
+	const cases = [
+		`const object = {\n\ta: 1,\n\tbbbbbb: 2,\n\tcc: 3,\n};\n`,
+		`const quoted = {\n\t"a-b": 1,\n\tbbbbbb: 2,\n\tcc: 3,\n};\n`,
+		`const computed = {\n\t[a]: 1,\n\tbbbbbb: 2,\n\tcc: 3,\n};\n`,
+		`interface Members {\n\ta: Foo;\n\tbbbbbb?: number;\n\tcc: number;\n}\n`,
+		`type Literal = {\n\ta: Foo;\n\tbbbbbb: number;\n\tcc: number;\n};\n`,
+		`class Fields {\n\ta: Foo;\n\tbbbbbb: number;\n\tcc: number;\n}\n`,
+		`class Initializers {\n\ta: Foo = 1;\n\tbbbbbb: number = 3;\n\tcc: number = 4;\n}\n`,
+		`class Modifiers {\n\tprivate a: Foo = 1;\n\tstatic readonly bbbbbb: number = 3;\n\tdeclare cc?: number;\n}\n`,
+	];
+
+	for (const source of cases) {
+		const formatted = await prettier.format(source, {
+			parser:     "typescript",
+			plugins:    ["@huggingface/prettier-plugin-vertical-align"],
+			printWidth: 120,
+			tabWidth:   2,
+			useTabs:    true,
+		});
+
+		// Every member of these sources is on a line of its own, at the same indentation, so all their values
+		// have to start at the same column
+		const columns = new Set();
+		for (const line of formatted.split("\n")) {
+			const member = /^\t+(?<key>.*?):(?<spaces> +)(?<value>\S.*)$/u.exec(line);
+			if (member) {
+				columns.add(line.length - member.groups.value.length);
+			}
+		}
+
+		if (columns.size > 1) {
+			failures.push(
+				`the members of this source are not aligned:\n${source}\n--- formatted ---\n${formatted}`,
+			);
+		}
+	}
+}
+
 await checkFixtures();
+await checkColumnsAreAligned();
 await checkQuotedKeys();
 await checkGroupBoundaries();
 await checkGeneratedObjects();
