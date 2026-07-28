@@ -32,3 +32,12 @@ const widthBreakKeepsTheGroup = {
 		: [],
 	limit:      isSet(o.limit) ? Number(o.limit) : 0,
 };
+
+class GroupsOfFields {
+	// A multiline initializer ends the group, like a multiline value does
+	a: Foo = {
+		x: 1,
+	};
+	bbbbbb: number = 3;
+	cc:     number = 4;
+}

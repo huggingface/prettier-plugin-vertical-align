@@ -124,3 +124,11 @@ const alignmentIsStable = {
 		aLongCondition && anotherConditionThatMakesTheLineTooLongForTheWidth,
 	aVeryMuchLongerKey: 1,
 };
+
+// Class properties with an initializer are aligned too: the ":" prettier prints for them is nested in the
+// group of the "key: Type" part of the assignment.
+class WithInitializers {
+	a:      Foo = 1;
+	bbbbbb: number = 3;
+	cc:     number = 4;
+}

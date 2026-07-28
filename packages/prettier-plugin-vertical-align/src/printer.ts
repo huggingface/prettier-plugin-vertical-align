@@ -1,4 +1,5 @@
 import type { AstPath, Doc, Printer } from "prettier";
+import type { builders } from "prettier/doc";
 import { getOriginalPrinter } from "./original-printer.js";
 
 type Node = AstPath["node"];
@@ -132,33 +133,40 @@ function addPaddingAfterColon(doc: Doc, padding: number): Doc {
 	const spaces = " ".repeat(padding);
 
 	// The separator is a part of its own in the doc of a property: `[key, ":", " ", value]` for an object
-	// property, `[key, [": ", type]]` for an interface member, ...
-	function patch(parts: Doc[]): Doc[] | undefined {
-		for (const [index, part] of parts.entries()) {
-			if (part === ":" || part === ": ") {
-				const patched = [...parts];
-				patched[index] = `:${spaces}${part.slice(1)}`;
-				return patched;
-			}
-			if (Array.isArray(part)) {
-				const patchedPart = patch(part);
-				if (patchedPart) {
-					const patched = [...parts];
-					patched[index] = patchedPart;
+	// property, `[key, [": ", type]]` for an interface member, `group([group([key, [": ", type]]), " =", value])`
+	// for a class property with an initializer, ... The first one we find is the one after the key, as the key
+	// is printed before it.
+	function patch(part: Doc): Doc | undefined {
+		if (part === ":" || part === ": ") {
+			return `:${spaces}${part.slice(1)}`;
+		}
+
+		if (Array.isArray(part)) {
+			for (const [index, child] of part.entries()) {
+				const patchedChild = patch(child);
+				if (patchedChild !== undefined) {
+					const patched = [...part];
+					patched[index] = patchedChild;
 					return patched;
 				}
+			}
+			return;
+		}
+
+		if (isPatchableGroup(part)) {
+			const patchedContents = patch(part.contents);
+			if (patchedContents !== undefined) {
+				return { ...part, contents: patchedContents };
 			}
 		}
 	}
 
-	if (Array.isArray(doc)) {
-		return patch(doc) ?? doc;
-	}
-	if (typeof doc === "object" && doc.type === "group" && Array.isArray(doc.contents)) {
-		const patched = patch(doc.contents);
-		return patched ? { ...doc, contents: patched } : doc;
-	}
-	return doc;
+	return patch(doc) ?? doc;
+}
+
+/** Conditional groups are left alone: their `expandedStates` hold other copies of the same doc. */
+function isPatchableGroup(doc: Doc): doc is builders.Group {
+	return typeof doc === "object" && !Array.isArray(doc) && doc.type === "group" && !doc.expandedStates;
 }
 
 /**
@@ -245,8 +253,12 @@ function hasBlankLineBetween(a: Node, b: Node, options: { originalText: string }
  * used to make layout decisions, otherwise the decision depends on the previous run's output.
  */
 function forcesBreak(prop: Node, options: { originalText: string }): boolean {
-	const value = isProperty(prop) ? prop[valueField(prop)] : prop;
-	return value ? subtreeForcesBreak(value, options) : false;
+	if (!isProperty(prop)) {
+		return subtreeForcesBreak(prop, options);
+	}
+
+	// A class property is `key: Type = initializer`: both sides can be printed on several lines
+	return subtreeForcesBreak(prop.value, options) || subtreeForcesBreak(prop.typeAnnotation, options);
 }
 
 const OBJECT_LIKE = new Set([
