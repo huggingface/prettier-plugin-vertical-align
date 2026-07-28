@@ -5,8 +5,8 @@
 	"main": "index.js",
 	"scripts": {
 		"format:check": "prettier --check",
-		"test": "prettier --check src/index.ts src/test.js && ./test-parser.sh",
-		"test:write": "prettier --write src/index.ts src/test.js && ./test-parser.sh"
+		"test": "prettier --check src/index.ts src/test.js stability.mjs && ./test-parser.sh && node stability.mjs",
+		"test:write": "prettier --write src/index.ts src/test.js stability.mjs && ./test-parser.sh && node stability.mjs"
 	},
 	"private": true,
 	"dependencies": {

@@ -1,24 +1,11 @@
-import type { AstPath, Printer } from "prettier";
-import prettier from "prettier";
-// import { inspect } from "node:util";
-const { doc } = prettier;
+import type { AstPath, Doc, Printer } from "prettier";
+import type { builders } from "prettier/doc";
 import { getOriginalPrinter } from "./original-printer.js";
 
-const { group, softline, line, ifBreak, indent } = doc.builders;
-
 type Node = AstPath["node"];
-const keyLengthSymbol = Symbol("keyLength");
-const typeAnnotationPrefix = Symbol("typeAnnotation");
 
-function shouldMoveCompletelyToNextLine(node: Node) {
-	return node.type === "LogicalExpression";
-
-	// Alternative implementation:
-	// return node.value.type !== "ObjectExpression" &&
-	//   node.value.type !== "ArrayExpression" &&
-	//   node.value.type !== "CallExpression" &&
-	//   node.value.type !== "AwaitExpression";
-}
+/** Number of spaces to add after the ":" of a property, set by the printer of its parent. */
+const paddingSymbol = Symbol("padding");
 
 export const printer: Printer = {
 	print(path, options, _print, ...args) {
@@ -39,59 +26,33 @@ export const printer: Printer = {
 		//   console.log("node", inspect(node.body, { depth: 10 }));
 		// }
 
-		if (node[keyLengthSymbol]) {
-			const keyLength = node[keyLengthSymbol];
-			const addedLength = keyLength - (node.key.loc.end.column - node.key.loc.start.column) - modifierLength(node);
-
-			// console.log("keyLength", keyLength);
-
-			switch (node.type) {
-				case "Property":
-				case "ObjectProperty": {
-					// console.log(node.value.type);
-					return group([
-						node.computed ? "[" : "",
-						path.call(_print, "key"),
-						node.computed ? "]" : "",
-						":" + " ".repeat(addedLength + 1),
-						shouldMoveCompletelyToNextLine(node[valueField(node)])
-							? ifBreak(indent(group([line, path.call(_print, valueField(node))])), path.call(_print, valueField(node)))
-							: path.call(_print, valueField(node)),
-					]);
-				}
-				case "PropertyDefinition":
-				case "TSPropertySignature":
-					node.typeAnnotation[typeAnnotationPrefix] = addedLength;
-					return getOriginalPrinter().print(path, options, _print, ...args);
-				default:
-					throw new Error(`Unexpected node type: ${node.type}`);
-			}
-		}
-
-		if (node[typeAnnotationPrefix]) {
-			const addedLength = node[typeAnnotationPrefix];
-			return group([": " + " ".repeat(addedLength), path.call(_print, "typeAnnotation")]);
+		const padding = node[paddingSymbol];
+		if (padding) {
+			// Let prettier print the property - so that the key, the quotes around it and the layout of the value
+			// are exactly the ones prettier would use - and only widen the ":" separator of the doc it returns.
+			return addPaddingAfterColon(getOriginalPrinter().print(path, options, _print, ...args), padding);
 		}
 
 		if (isPropertyContainer(node)) {
 			let groups: Node[][] = [];
-			let prevLine = -Infinity;
 
 			// console.log("node", node);
 			// console.log("node", inspect(node, {depth: 10}));
-			const properties: Node[] = nodeProperties(node).filter((node: Node) =>
-				!isProperty(node) || !node[valueField(node)]?.loc
-					? node.loc.start.line === node.loc.end.line
-					: node.key.loc.start.line === node[valueField(node)].loc.start.line,
-			);
+			const properties: Node[] = nodeProperties(node);
 
+			// The container is only aligned if it is printed on multiple lines. Prettier decides that from the
+			// presence of a newline between the "{" and the first member in the *original* text, so this
+			// predicate is stable under re-formatting.
+			if (properties.length && !isExpanded(node, properties, options)) {
+				return getOriginalPrinter().print(path, options, _print, ...args);
+			}
+
+			let prev: Node | undefined;
 			for (const prop of properties) {
-				const propStart = prop.comments ? prop.comments[0].loc.start.line : prop.loc.start.line;
-				if (prevLine === propStart) {
-					// Multiple properties on the same line
-					return getOriginalPrinter().print(path, options, _print, ...args);
-				}
-				if (prevLine === -Infinity || (options.alignInGroups === "always" && prevLine !== propStart - 1)) {
+				if (
+					!prev ||
+					(options.alignInGroups === "always" && (hasBlankLineBetween(prev, prop, options) || forcesBreak(prev, options)))
+				) {
 					groups.push([]);
 				}
 
@@ -100,20 +61,19 @@ export const printer: Printer = {
 					groups.at(-1)!.push(prop);
 				}
 
-				prevLine = prop.loc.start.line;
+				prev = prop;
 			}
 
+			const quoteEveryKey = needsQuoteProps(properties, options);
+
 			for (const group of groups.filter((group) => group.length > 1)) {
-				let keyLength = 0;
-				for (const property of group) {
-					keyLength = Math.max(
-						keyLength,
-						property.key.loc.end.column - property.key.loc.start.column + modifierLength(property),
-					);
-				}
+				const keyLengths = new Map<Node, number>(
+					group.map((property) => [property, keyLength(property, options, quoteEveryKey)]),
+				);
+				const alignedLength = Math.max(...keyLengths.values());
 
 				for (const property of group) {
-					property[keyLengthSymbol] = keyLength;
+					property[paddingSymbol] = alignedLength - keyLengths.get(property)!;
 				}
 			}
 		}
@@ -164,6 +124,91 @@ function valueField(node: AstPath["node"]) {
 	throw new Error(`Unexpected node type: ${node.type}`);
 }
 
+/**
+ * Widens the ":" separating the key from the value in the doc prettier printed for a property, which is the
+ * only thing this plugin changes. Prettier trims the trailing spaces of a line, so the padding disappears by
+ * itself when the value is moved below the ":".
+ */
+function addPaddingAfterColon(doc: Doc, padding: number): Doc {
+	const spaces = " ".repeat(padding);
+
+	// The separator is a part of its own in the doc of a property: `[key, ":", " ", value]` for an object
+	// property, `[key, [": ", type]]` for an interface member, `group([group([key, [": ", type]]), " =", value])`
+	// for a class property with an initializer, ... The first one we find is the one after the key, as the key
+	// is printed before it.
+	function patch(part: Doc): Doc | undefined {
+		if (part === ":" || part === ": ") {
+			return `:${spaces}${part.slice(1)}`;
+		}
+
+		if (Array.isArray(part)) {
+			for (const [index, child] of part.entries()) {
+				const patchedChild = patch(child);
+				if (patchedChild !== undefined) {
+					const patched = [...part];
+					patched[index] = patchedChild;
+					return patched;
+				}
+			}
+			return;
+		}
+
+		if (isPatchableGroup(part)) {
+			const patchedContents = patch(part.contents);
+			if (patchedContents !== undefined) {
+				return { ...part, contents: patchedContents };
+			}
+		}
+	}
+
+	return patch(doc) ?? doc;
+}
+
+/** Conditional groups are left alone: their `expandedStates` hold other copies of the same doc. */
+function isPatchableGroup(doc: Doc): doc is builders.Group {
+	return typeof doc === "object" && !Array.isArray(doc) && doc.type === "group" && !doc.expandedStates;
+}
+
+/**
+ * The width of the key as prettier will print it: `quoteProps` can add or remove the quotes around it, and we
+ * have to align on what is printed, not on what was written.
+ */
+function keyLength(property: Node, options: { quoteProps?: string }, quoteEveryKey: boolean) {
+	const { key } = property;
+	const modifiers = modifierLength(property);
+
+	if (!property.computed) {
+		if (isStringKey(key)) {
+			if (!quoteEveryKey && options.quoteProps !== "preserve" && isIdentifierName(key.value)) {
+				return key.value.length + modifiers;
+			}
+		} else if (quoteEveryKey && key.type === "Identifier") {
+			return key.name.length + '""'.length + modifiers;
+		}
+	}
+
+	return key.loc.end.column - key.loc.start.column + modifiers;
+}
+
+/** Prettier's `quoteProps: "consistent"`: one key needing quotes means every key is quoted. */
+function needsQuoteProps(properties: Node[], options: { quoteProps?: string }) {
+	return (
+		options.quoteProps === "consistent" &&
+		properties.some(
+			(property) =>
+				isProperty(property) && !property.computed && isStringKey(property.key) && !isIdentifierName(property.key.value),
+		)
+	);
+}
+
+function isStringKey(key: Node) {
+	return key?.type === "StringLiteral" || (key?.type === "Literal" && typeof key.value === "string");
+}
+
+function isIdentifierName(value: string) {
+	return /^(?:[$_\p{ID_Start}])(?:[$\u200C\u200D\p{ID_Continue}])*$/u.test(value);
+}
+
 function modifierLength(node: AstPath["node"]) {
 	return (
 		(node.optional ? "?".length : 0) +
@@ -174,4 +219,118 @@ function modifierLength(node: AstPath["node"]) {
 		(node.declare ? "declare ".length : 0) +
 		(node.readonly ? "readonly ".length : 0)
 	);
+}
+
+function nodeStart(node: Node): number {
+	return node.range?.[0] ?? node.start;
+}
+function nodeEnd(node: Node): number {
+	return node.range?.[1] ?? node.end;
+}
+function startWithComments(node: Node): number {
+	return node.comments?.length ? Math.min(nodeStart(node), ...node.comments.map(nodeStart)) : nodeStart(node);
+}
+function endWithComments(node: Node): number {
+	return node.comments?.length ? Math.max(nodeEnd(node), ...node.comments.map(nodeEnd)) : nodeEnd(node);
+}
+
+/**
+ * Whether prettier prints this object-like node on several lines: it does so when there is a newline between
+ * the "{" and the first member in the original text - comments on the "{" line do not count.
+ */
+function isExpanded(container: Node, members: Node[], options: { originalText: string }) {
+	return members.length > 0 && options.originalText.slice(nodeStart(container), nodeStart(members[0])).includes("\n");
+}
+
+function hasBlankLineBetween(a: Node, b: Node, options: { originalText: string }) {
+	const between = options.originalText.slice(endWithComments(a), startWithComments(b));
+	return (between.match(/\n/g)?.length ?? 0) > 1;
+}
+
+/**
+ * Whether this property is guaranteed to be printed on several lines, whatever the print width is.
+ * Only *forced* breaks are taken into account: a break caused by the line being too long must not be
+ * used to make layout decisions, otherwise the decision depends on the previous run's output.
+ */
+function forcesBreak(prop: Node, options: { originalText: string }): boolean {
+	if (!isProperty(prop)) {
+		return subtreeForcesBreak(prop, options);
+	}
+
+	// A class property is `key: Type = initializer`: both sides can be printed on several lines
+	return subtreeForcesBreak(prop.value, options) || subtreeForcesBreak(prop.typeAnnotation, options);
+}
+
+const OBJECT_LIKE = new Set([
+	"ObjectExpression",
+	"ObjectPattern",
+	"TSTypeLiteral",
+	"TSInterfaceBody",
+	"ClassBody",
+	"RecordExpression",
+]);
+
+/**
+ * Prettier always breaks an array of at least two object or array literals having more than one member.
+ */
+function isAlwaysBrokenArray(node: Node) {
+	if (node.type !== "ArrayExpression" && node.type !== "TupleExpression") {
+		return false;
+	}
+
+	return (
+		node.elements.length > 1 &&
+		node.elements.every(
+			(element: Node) =>
+				(element?.type === "ObjectExpression" && element.properties.length > 1) ||
+				((element?.type === "ArrayExpression" || element?.type === "TupleExpression") && element.elements.length > 1),
+		)
+	);
+}
+
+/** A comment written on its own line stays on its own line, a trailing one does not break anything. */
+function isOwnLineComment(comment: Node, options: { originalText: string }) {
+	const before = options.originalText.slice(0, nodeStart(comment));
+	return (
+		/\n[^\S\n]*$/.test(before) ||
+		options.originalText.slice(nodeStart(comment), nodeEnd(comment)).includes("\n")
+	);
+}
+
+function subtreeForcesBreak(node: Node, options: { originalText: string }): boolean {
+	if (!node || typeof node !== "object") {
+		return false;
+	}
+	if (Array.isArray(node)) {
+		return node.some((child) => subtreeForcesBreak(child, options));
+	}
+	if (!node.type) {
+		return false;
+	}
+	if (node.comments?.some((comment: Node) => isOwnLineComment(comment, options))) {
+		return true;
+	}
+	if (OBJECT_LIKE.has(node.type) && isExpanded(node, node.properties ?? node.body ?? node.members ?? [], options)) {
+		return true;
+	}
+	if (isAlwaysBrokenArray(node)) {
+		return true;
+	}
+	if (node.type === "BlockStatement" && node.body?.length) {
+		return true;
+	}
+	// Only the literal parts of a template are kept as they are written: a newline anywhere else comes from a
+	// nested node, which is checked on its own below.
+	if (node.type === "TemplateLiteral" && node.quasis?.some((quasi: Node) => quasi.value?.raw?.includes("\n"))) {
+		return true;
+	}
+	for (const key of Object.keys(node)) {
+		if (key === "loc" || key === "range" || key === "parent" || key === "tokens") {
+			continue;
+		}
+		if (subtreeForcesBreak(node[key], options)) {
+			return true;
+		}
+	}
+	return false;
 }
