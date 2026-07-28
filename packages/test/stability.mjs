@@ -243,8 +243,46 @@ async function checkQuotedKeys() {
 	}
 }
 
+/**
+ * Group boundaries must only depend on breaks that always happen, whatever the print width is.
+ */
+async function checkGroupBoundaries() {
+	const cases = [
+		// a comment on the "{" line does not prevent prettier from expanding the object
+		`const x = { // hello\n\taa: 1, bbbbbb: 2 };\n`,
+		// an inline comment does not make the value multiline
+		`const x = {\n\taa: /* cast */ value,\n\tbbbbbb: 3,\n\tcc: 4,\n};\n`,
+		// neither does a trailing one
+		`const x = {\n\taa: 1, // note\n\tbbbbbb: 3,\n\tcc: 4,\n};\n`,
+		// prettier collapses this array, so it stays in the group
+		`const x = {\n\taa: [\n\t\t1,\n\t\t2,\n\t],\n\tbbbbbb: 3,\n\tcc: 4,\n};\n`,
+		// but it always breaks an array of objects, so it ends the group
+		`const x = {\n\taa: [{ a: 1, b: 2 }, { a: 3, b: 4 }],\n\tbbbbbb: 3,\n\tcc: 4,\n};\n`,
+		// a break inside a template interpolation is not a break of the property
+		`const x = {\n\tk: \`text \${fn(argumentOne, argumentTwo, argumentThree, argFour)} tail\`,\n\tkkkkkkkkkkkk: 1,\n\tkkk: 2,\n};\n`,
+	];
+
+	for (const [index, source] of cases.entries()) {
+		for (const alignInGroups of ["never", "always"]) {
+			await checkStable(
+				`group boundaries #${index} (alignInGroups: ${alignInGroups})\n${source}`,
+				source,
+				{
+					parser:     "typescript",
+					plugins:    ["@huggingface/prettier-plugin-vertical-align"],
+					printWidth: 80,
+					tabWidth:   2,
+					useTabs:    true,
+					alignInGroups,
+				},
+			);
+		}
+	}
+}
+
 await checkFixtures();
 await checkQuotedKeys();
+await checkGroupBoundaries();
 await checkGeneratedObjects();
 await checkGeneratedObjectsMatchPrettier();
 

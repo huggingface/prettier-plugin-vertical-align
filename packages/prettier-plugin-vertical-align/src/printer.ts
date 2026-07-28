@@ -42,7 +42,7 @@ export const printer: Printer = {
 			// The container is only aligned if it is printed on multiple lines. Prettier decides that from the
 			// presence of a newline between the "{" and the first member in the *original* text, so this
 			// predicate is stable under re-formatting.
-			if (properties.length && !hasNewlineBeforeFirstMember(node, properties[0], options)) {
+			if (properties.length && !isExpanded(node, properties, options)) {
 				return getOriginalPrinter().print(path, options, _print, ...args);
 			}
 
@@ -226,10 +226,12 @@ function endWithComments(node: Node): number {
 	return node.comments?.length ? Math.max(nodeEnd(node), ...node.comments.map(nodeEnd)) : nodeEnd(node);
 }
 
-function hasNewlineBeforeFirstMember(container: Node, firstMember: Node, options: { originalText: string }) {
-	return options.originalText
-		.slice(nodeStart(container), startWithComments(firstMember))
-		.includes("\n");
+/**
+ * Whether prettier prints this object-like node on several lines: it does so when there is a newline between
+ * the "{" and the first member in the original text - comments on the "{" line do not count.
+ */
+function isExpanded(container: Node, members: Node[], options: { originalText: string }) {
+	return members.length > 0 && options.originalText.slice(nodeStart(container), nodeStart(members[0])).includes("\n");
 }
 
 function hasBlankLineBetween(a: Node, b: Node, options: { originalText: string }) {
@@ -256,6 +258,33 @@ const OBJECT_LIKE = new Set([
 	"RecordExpression",
 ]);
 
+/**
+ * Prettier always breaks an array of at least two object or array literals having more than one member.
+ */
+function isAlwaysBrokenArray(node: Node) {
+	if (node.type !== "ArrayExpression" && node.type !== "TupleExpression") {
+		return false;
+	}
+
+	return (
+		node.elements.length > 1 &&
+		node.elements.every(
+			(element: Node) =>
+				(element?.type === "ObjectExpression" && element.properties.length > 1) ||
+				((element?.type === "ArrayExpression" || element?.type === "TupleExpression") && element.elements.length > 1),
+		)
+	);
+}
+
+/** A comment written on its own line stays on its own line, a trailing one does not break anything. */
+function isOwnLineComment(comment: Node, options: { originalText: string }) {
+	const before = options.originalText.slice(0, nodeStart(comment));
+	return (
+		/\n[^\S\n]*$/.test(before) ||
+		options.originalText.slice(nodeStart(comment), nodeEnd(comment)).includes("\n")
+	);
+}
+
 function subtreeForcesBreak(node: Node, options: { originalText: string }): boolean {
 	if (!node || typeof node !== "object") {
 		return false;
@@ -266,19 +295,21 @@ function subtreeForcesBreak(node: Node, options: { originalText: string }): bool
 	if (!node.type) {
 		return false;
 	}
-	if (node.comments?.length) {
+	if (node.comments?.some((comment: Node) => isOwnLineComment(comment, options))) {
 		return true;
 	}
-	if (OBJECT_LIKE.has(node.type)) {
-		const members = node.properties ?? node.body ?? node.members ?? [];
-		if (members.length && hasNewlineBeforeFirstMember(node, members[0], options)) {
-			return true;
-		}
+	if (OBJECT_LIKE.has(node.type) && isExpanded(node, node.properties ?? node.body ?? node.members ?? [], options)) {
+		return true;
+	}
+	if (isAlwaysBrokenArray(node)) {
+		return true;
 	}
 	if (node.type === "BlockStatement" && node.body?.length) {
 		return true;
 	}
-	if (node.type === "TemplateLiteral" && options.originalText.slice(nodeStart(node), nodeEnd(node)).includes("\n")) {
+	// Only the literal parts of a template are kept as they are written: a newline anywhere else comes from a
+	// nested node, which is checked on its own below.
+	if (node.type === "TemplateLiteral" && node.quasis?.some((quasi: Node) => quasi.value?.raw?.includes("\n"))) {
 		return true;
 	}
 	for (const key of Object.keys(node)) {
