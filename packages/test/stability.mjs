@@ -323,12 +323,74 @@ async function checkColumnsAreAligned() {
 	}
 }
 
+/**
+ * Range-formatting (`rangeStart`/`rangeEnd`) must not crash. Prettier runs `preprocess` more than
+ * once for a range format, and a second `setOriginalPrinter` call used to capture the plugin's own
+ * printer, making `getOriginalPrinter().print` re-enter the plugin's `print` for the root node until
+ * the stack overflowed. The formatted output of a range covering the whole file must equal the
+ * full-file output.
+ */
+async function checkRangeFormatting() {
+	const sources = [
+		`const object = {\n\ta: 1,\n\tbbbbbb: 2,\n\tcc: 3,\n};\n`,
+		`interface X {\n\ta:  string;\n\tbc: number;\n}\n`,
+		`const x = {\n\ta:  1,\n\tbc: {\n\t\tx: 1,\n\t},\n};\n`,
+	];
+	for (const [index, source] of sources.entries()) {
+		for (const alignInGroups of ["never", "always"]) {
+			const options = {
+				parser:     "typescript",
+				plugins:    ["@huggingface/prettier-plugin-vertical-align"],
+				printWidth: 120,
+				tabWidth:   2,
+				useTabs:    true,
+				alignInGroups,
+			};
+			let full;
+			try {
+				full = await prettier.format(source, options);
+			} catch (err) {
+				failures.push(
+					`range #${index} full-file format threw: ${err.message}\n${source}`,
+				);
+				continue;
+			}
+			// range covering the whole file, a prefix, and a suffix
+			for (const [range, [start, end]] of [
+				["full", [0, source.length]],
+				["prefix", [0, 10]],
+				["suffix", [Math.max(0, source.length - 5), source.length]],
+			]) {
+				let rangeOut;
+				try {
+					rangeOut = await prettier.format(source, {
+						...options,
+						rangeStart: start,
+						rangeEnd:   end,
+					});
+				} catch (err) {
+					failures.push(
+						`range #${index} (${range}, alignInGroups: ${alignInGroups}) threw: ${err.message}\n${source}`,
+					);
+					continue;
+				}
+				if (rangeOut !== full) {
+					failures.push(
+						`range #${index} (${range}, alignInGroups: ${alignInGroups}) differs from full-file output:\n${source}\n--- full ---\n${full}--- range ---\n${rangeOut}`,
+					);
+				}
+			}
+		}
+	}
+}
+
 await checkFixtures();
 await checkColumnsAreAligned();
 await checkQuotedKeys();
 await checkGroupBoundaries();
 await checkGeneratedObjects();
 await checkGeneratedObjectsMatchPrettier();
+await checkRangeFormatting();
 
 if (failures.length) {
 	console.error(`${failures.join("\n\n")}`);
