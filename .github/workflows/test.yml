@@ -11,14 +11,14 @@ jobs:
     timeout-minutes: 10
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v7
         with:
           # Could use something like rmacklin/fetch-through-merge-base@v0 instead when the repo gets bigger
           fetch-depth: 0
 
       - run: corepack enable
 
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v7
         with:
           node-version: "20"
           cache: "pnpm"
